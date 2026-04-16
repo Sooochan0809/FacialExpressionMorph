@@ -89,8 +89,35 @@
       max-width: 420px;
     }
 
+    .camera-panel {
+      position: relative;
+      width: 100%;
+    }
+
     .preview-item span {
       font-size: 0.75rem;
+    }
+
+    .expression-badge {
+      position: absolute;
+      left: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 1;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.75rem;
+      background: rgba(0, 0, 0, 0.62);
+      color: #fff;
+      font-size: 0.8rem;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+    }
+
+    .expression-line {
+      display: block;
+    }
+
+    .expression-line.is-primary {
+      color: #ff6b6b;
     }
 
     .preview-item video,
@@ -171,17 +198,26 @@
   <main>
     <div class="preview-row">
       <div class="preview-item">
-        <video id="video" autoplay playsinline muted></video>
+        <div class="camera-panel">
+          <video id="video" autoplay playsinline muted></video>
+          <div id="expressionStatus" class="expression-badge">感情検知中...</div>
+        </div>
         <span>Camera</span>
       </div>
 
       <div class="preview-item">
-        <canvas id="shotA"></canvas>
+        <div class="camera-panel">
+          <canvas id="shotA"></canvas>
+          <div id="shotAExpressionStatus" class="expression-badge">未撮影</div>
+        </div>
         <span>A</span>
       </div>
 
       <div class="preview-item">
-        <canvas id="shotB"></canvas>
+        <div class="camera-panel">
+          <canvas id="shotB"></canvas>
+          <div id="shotBExpressionStatus" class="expression-badge">未撮影</div>
+        </div>
         <span>B</span>
       </div>
 
@@ -204,6 +240,7 @@
     </div>
   </footer>
 
+  <script src="./face-api.min.js"></script>
   <script type="module">
     import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
     import Delaunator from "https://cdn.jsdelivr.net/npm/delaunator@5/+esm";
@@ -223,9 +260,24 @@
     const shotBCanvas = document.getElementById("shotB");
     const resultCanvas = document.getElementById("canvas");
     const resultCtx = resultCanvas.getContext("2d");
+    const expressionStatus = document.getElementById("expressionStatus");
+    const shotAExpressionStatus = document.getElementById("shotAExpressionStatus");
+    const shotBExpressionStatus = document.getElementById("shotBExpressionStatus");
 
     let stream = null;
     let faceLandmarker = null;
+    let expressionDetectionTimer = null;
+    let lastExpressionKey = "";
+    let currentExpressions = null;
+    const expressionOrder = [
+      "neutral",
+      "happy",
+      "sad",
+      "angry",
+      "fearful",
+      "disgusted",
+      "surprised",
+    ];
 
     let imgA = null;
     let imgB = null;
@@ -267,6 +319,13 @@
       return faceLandmarker;
     }
 
+    async function loadFaceApiModels() {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
+        faceapi.nets.faceExpressionNet.loadFromUri("./models"),
+      ]);
+    }
+
     async function startCamera() {
       if (stream) return stream;
 
@@ -286,7 +345,109 @@
       });
 
       await video.play();
+      startExpressionDetection();
       return stream;
+    }
+
+    function formatExpressionLabel(label) {
+      const labels = {
+        neutral: "無表情",
+        happy: "喜び",
+        sad: "悲しみ",
+        angry: "怒り",
+        fearful: "恐れ",
+        disgusted: "嫌悪",
+        surprised: "驚き",
+      };
+
+      return labels[label] || label;
+    }
+
+    function getPrimaryExpressionLabel(expressions) {
+      let primaryLabel = null;
+      let primaryScore = -1;
+
+      expressionOrder.forEach((label) => {
+        const score = expressions[label];
+        if (typeof score !== "number") return;
+        if (score > primaryScore) {
+          primaryScore = score;
+          primaryLabel = label;
+        }
+      });
+
+      return primaryLabel;
+    }
+
+    function formatExpressionSummary(expressions) {
+      const primaryLabel = getPrimaryExpressionLabel(expressions);
+
+      return expressionOrder
+        .filter((label) => typeof expressions[label] === "number")
+        .map((label) => {
+          const className = label === primaryLabel ? "expression-line is-primary" : "expression-line";
+          return `<span class="${className}">${formatExpressionLabel(label)} ${Math.round(expressions[label] * 100)}%</span>`;
+        })
+        .join("");
+    }
+
+    function updateExpressionStatus(expressions) {
+      if (!expressions) {
+        expressionStatus.textContent = "感情検知中...";
+        lastExpressionKey = "";
+        currentExpressions = null;
+        return;
+      }
+
+      const nextText = formatExpressionSummary(expressions);
+      const nextKey = nextText;
+      if (nextKey === lastExpressionKey) return;
+
+      lastExpressionKey = nextKey;
+      currentExpressions = { ...expressions };
+      expressionStatus.innerHTML = nextText;
+    }
+
+    function snapshotExpressionText() {
+      if (!currentExpressions) {
+        return '<span class="expression-line">感情未検出</span>';
+      }
+
+      return formatExpressionSummary(currentExpressions);
+    }
+
+    function startExpressionDetection() {
+      if (expressionDetectionTimer) return;
+
+      const detectExpressions = async () => {
+        if (video.readyState < 2) {
+          return;
+        }
+
+        try {
+          const detection = await faceapi
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceExpressions();
+
+          if (!detection) {
+            updateExpressionStatus(null);
+            return;
+          }
+
+          const entries = Object.entries(detection.expressions);
+          if (entries.length === 0) {
+            updateExpressionStatus(null);
+            return;
+          }
+
+          updateExpressionStatus(detection.expressions);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      detectExpressions();
+      expressionDetectionTimer = window.setInterval(detectExpressions, 250);
     }
 
     function getCenteredCropRect(srcWidth, srcHeight, targetRatio) {
@@ -471,7 +632,10 @@
 
     async function initializeApp() {
       try {
-        await createLandmarker();
+        await Promise.all([
+          createLandmarker(),
+          loadFaceApiModels(),
+        ]);
         await startCamera();
       } catch (err) {
         console.error(err);
@@ -482,6 +646,7 @@
     captureABtn.addEventListener("click", async () => {
       try {
         captureFrameToCanvas(shotACanvas);
+        shotAExpressionStatus.innerHTML = snapshotExpressionText();
         imgA = await canvasToImage(shotACanvas);
 
         if (imgA && imgB) {
@@ -496,6 +661,7 @@
     captureBBtn.addEventListener("click", async () => {
       try {
         captureFrameToCanvas(shotBCanvas);
+        shotBExpressionStatus.innerHTML = snapshotExpressionText();
         imgB = await canvasToImage(shotBCanvas);
 
         if (imgA && imgB) {
