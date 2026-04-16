@@ -97,13 +97,10 @@ http://localhost:8000
 ```text
 .
 ├── index.html
-├── script.js
 ├── face-api.min.js
 ├── models/
 └── README.md
 ```
-
-`script.js` は旧構成の実験コードで、現在の主要なアプリロジックは `index.html` 内に含まれています。
 
 ## 注意点
 
