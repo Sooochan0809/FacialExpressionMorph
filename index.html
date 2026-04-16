@@ -313,26 +313,31 @@
     const OUTPUT_HEIGHT = 400;
     const OUTPUT_RATIO = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 
-    const video = document.getElementById("video");
-    const captureABtnFooter = document.getElementById("captureABtnFooter");
-    const captureBBtnFooter = document.getElementById("captureBBtnFooter");
-    const uploadABtn = document.getElementById("uploadABtn");
-    const uploadBBtn = document.getElementById("uploadBBtn");
-    const fileInputA = document.getElementById("fileInputA");
-    const fileInputB = document.getElementById("fileInputB");
-
-    const tRange = document.getElementById("tRange");
-    const tValue = document.getElementById("tValue");
-
-    const shotACanvas = document.getElementById("shotA");
-    const shotBCanvas = document.getElementById("shotB");
-    const shotAPlaceholder = document.getElementById("shotAPlaceholder");
-    const shotBPlaceholder = document.getElementById("shotBPlaceholder");
-    const resultCanvas = document.getElementById("canvas");
+    const $ = (id) => document.getElementById(id);
+    const video = $("video");
+    const tRange = $("tRange");
+    const tValue = $("tValue");
+    const resultCanvas = $("canvas");
     const resultCtx = resultCanvas.getContext("2d");
-    const expressionStatus = document.getElementById("expressionStatus");
-    const shotAExpressionStatus = document.getElementById("shotAExpressionStatus");
-    const shotBExpressionStatus = document.getElementById("shotBExpressionStatus");
+    const expressionStatus = $("expressionStatus");
+    const shots = {
+      A: {
+        canvas: $("shotA"),
+        placeholder: $("shotAPlaceholder"),
+        status: $("shotAExpressionStatus"),
+        captureBtn: $("captureABtnFooter"),
+        uploadBtn: $("uploadABtn"),
+        fileInput: $("fileInputA"),
+      },
+      B: {
+        canvas: $("shotB"),
+        placeholder: $("shotBPlaceholder"),
+        status: $("shotBExpressionStatus"),
+        captureBtn: $("captureBBtnFooter"),
+        uploadBtn: $("uploadBBtn"),
+        fileInput: $("fileInputB"),
+      },
+    };
 
     let stream = null;
     let faceLandmarker = null;
@@ -349,8 +354,7 @@
       "surprised",
     ];
 
-    let imgA = null;
-    let imgB = null;
+    const shotImages = { A: null, B: null };
 
     function setPlaceholderVisible(placeholderEl, isVisible) {
       placeholderEl.classList.toggle("is-hidden", !isVisible);
@@ -365,7 +369,7 @@
     tRange.addEventListener("input", () => {
       syncSliderLabel();
 
-      if (imgA && imgB) {
+      if (shotImages.A && shotImages.B) {
         try {
           renderMorph();
         } catch (err) {
@@ -490,49 +494,39 @@
       return formatExpressionSummary(currentExpressions);
     }
 
-    async function detectExpressionSummaryFromSource(source) {
+    function formatDetectedExpressions(expressions) {
+      return expressions
+        ? formatExpressionSummary(expressions)
+        : '<span class="expression-line">感情未検出</span>';
+    }
+
+    async function detectExpressionsFromSource(source) {
       const detection = await faceapi
         .detectSingleFace(source, new faceapi.TinyFaceDetectorOptions())
         .withFaceExpressions();
 
-      if (!detection || Object.keys(detection.expressions).length === 0) {
-        return '<span class="expression-line">感情未検出</span>';
-      }
-
-      return formatExpressionSummary(detection.expressions);
+      return detection?.expressions && Object.keys(detection.expressions).length > 0
+        ? detection.expressions
+        : null;
     }
 
     function startExpressionDetection() {
       if (expressionDetectionTimer) return;
 
-      const detectExpressions = async () => {
+      const detectVideoExpressions = async () => {
         if (video.readyState < 2) {
           return;
         }
 
         try {
-          const detection = await faceapi
-            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-            .withFaceExpressions();
-
-          if (!detection) {
-            updateExpressionStatus(null);
-            return;
-          }
-
-          if (Object.keys(detection.expressions).length === 0) {
-            updateExpressionStatus(null);
-            return;
-          }
-
-          updateExpressionStatus(detection.expressions);
+          updateExpressionStatus(await detectExpressionsFromSource(video));
         } catch (err) {
           console.error(err);
         }
       };
 
-      detectExpressions();
-      expressionDetectionTimer = window.setInterval(detectExpressions, 250);
+      detectVideoExpressions();
+      expressionDetectionTimer = window.setInterval(detectVideoExpressions, 250);
     }
 
     function getCenteredCropRect(srcWidth, srcHeight, targetRatio) {
@@ -604,18 +598,17 @@
       }
     }
 
-    async function setShotFromCanvas(targetCanvas, statusEl, placeholderEl, assignImage, expressionHtml) {
-      const nextExpressionHtml = expressionHtml ?? await detectExpressionSummaryFromSource(targetCanvas);
-      statusEl.innerHTML = nextExpressionHtml;
-      setPlaceholderVisible(placeholderEl, false);
-      assignImage(await canvasToImage(targetCanvas));
+    async function setShotFromCanvas(shot, expressionHtml) {
+      shot.status.innerHTML = expressionHtml ?? formatDetectedExpressions(await detectExpressionsFromSource(shot.canvas));
+      setPlaceholderVisible(shot.placeholder, false);
+      shot.image = await canvasToImage(shot.canvas);
 
-      if (imgA && imgB) {
+      if (shotImages.A && shotImages.B) {
         renderMorph();
       }
     }
 
-    async function loadFileToShot(file, targetCanvas, statusEl, placeholderEl, assignImage) {
+    async function loadFileToShot(file, shot) {
       if (!file) return;
 
       const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
@@ -626,13 +619,8 @@
 
       try {
         const bitmap = await fileToImageBitmap(file);
-        drawImageCover(targetCanvas, bitmap);
-        await setShotFromCanvas(
-          targetCanvas,
-          statusEl,
-          placeholderEl,
-          assignImage
-        );
+        drawImageCover(shot.canvas, bitmap);
+        await setShotFromCanvas(shot);
         bitmap.close();
       } catch (err) {
         console.error(err);
@@ -759,15 +747,15 @@
     }
 
     function renderMorph() {
-      if (!imgA || !imgB) {
+      if (!shotImages.A || !shotImages.B) {
         throw new Error("AとBを先に撮影してください。");
       }
 
       const t = Number(tRange.value);
-      const pointsA = getLandmarks(imgA);
-      const pointsB = getLandmarks(imgB);
+      const pointsA = getLandmarks(shotImages.A);
+      const pointsB = getLandmarks(shotImages.B);
 
-      morphImages(imgA, imgB, pointsA, pointsB, t);
+      morphImages(shotImages.A, shotImages.B, pointsA, pointsB, t);
     }
 
     async function initializeApp() {
@@ -783,87 +771,33 @@
       }
     }
 
-    async function captureShotA() {
+    async function captureShot(key) {
+      const shot = shots[key];
       try {
-        captureFrameToCanvas(shotACanvas);
-        await setShotFromCanvas(
-          shotACanvas,
-          shotAExpressionStatus,
-          shotAPlaceholder,
-          (nextImage) => {
-            imgA = nextImage;
-          },
-          snapshotExpressionText()
-        );
+        captureFrameToCanvas(shot.canvas);
+        await setShotFromCanvas(shot, snapshotExpressionText());
       } catch (err) {
         console.error(err);
-        alert(err.message || "Aの撮影に失敗しました。");
+        alert(err.message || `${key}の撮影に失敗しました。`);
       }
     }
+    Object.entries(shots).forEach(([key, shot]) => {
+      Object.defineProperty(shot, "image", {
+        get: () => shotImages[key],
+        set: (value) => {
+          shotImages[key] = value;
+        },
+      });
 
-    async function captureShotB() {
-      try {
-        captureFrameToCanvas(shotBCanvas);
-        await setShotFromCanvas(
-          shotBCanvas,
-          shotBExpressionStatus,
-          shotBPlaceholder,
-          (nextImage) => {
-            imgB = nextImage;
-          },
-          snapshotExpressionText()
-        );
-      } catch (err) {
-        console.error(err);
-        alert(err.message || "Bの撮影に失敗しました。");
-      }
-    }
-
-    captureABtnFooter.addEventListener("click", captureShotA);
-    captureBBtnFooter.addEventListener("click", captureShotB);
-
-    uploadABtn.addEventListener("click", () => {
-      fileInputA.click();
-    });
-
-    uploadBBtn.addEventListener("click", () => {
-      fileInputB.click();
-    });
-
-    shotAPlaceholder.addEventListener("click", () => {
-      fileInputA.click();
-    });
-
-    shotBPlaceholder.addEventListener("click", () => {
-      fileInputB.click();
-    });
-
-    fileInputA.addEventListener("change", async (event) => {
-      const [file] = event.target.files ?? [];
-      await loadFileToShot(
-        file,
-        shotACanvas,
-        shotAExpressionStatus,
-        shotAPlaceholder,
-        (nextImage) => {
-          imgA = nextImage;
-        }
-      );
-      event.target.value = "";
-    });
-
-    fileInputB.addEventListener("change", async (event) => {
-      const [file] = event.target.files ?? [];
-      await loadFileToShot(
-        file,
-        shotBCanvas,
-        shotBExpressionStatus,
-        shotBPlaceholder,
-        (nextImage) => {
-          imgB = nextImage;
-        }
-      );
-      event.target.value = "";
+      const openFilePicker = () => shot.fileInput.click();
+      shot.captureBtn.addEventListener("click", () => captureShot(key));
+      shot.uploadBtn.addEventListener("click", openFilePicker);
+      shot.placeholder.addEventListener("click", openFilePicker);
+      shot.fileInput.addEventListener("change", async (event) => {
+        const [file] = event.target.files ?? [];
+        await loadFileToShot(file, shot);
+        event.target.value = "";
+      });
     });
 
     initializeApp();
