@@ -143,6 +143,20 @@
       justify-content: center;
     }
 
+    .camera-guide {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: 70%;
+      aspect-ratio: 3 / 4;
+      max-height: calc(100% - 2rem);
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 1;
+    }
+
     .upload-chip {
       position: absolute;
       top: 0.75rem;
@@ -257,6 +271,7 @@
       <div class="preview-item">
         <div class="camera-panel">
           <video id="video" autoplay playsinline muted></video>
+          <div class="camera-guide" aria-hidden="true"></div>
           <div id="expressionStatus" class="expression-badge">感情検知中...</div>
         </div>
         <span>Camera</span>
