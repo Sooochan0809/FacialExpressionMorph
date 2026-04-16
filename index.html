@@ -17,7 +17,6 @@
       display: flex;
       flex-direction: column;
       flex: 1;
-      margin: 0;
       padding: 1rem;
       font-family: sans-serif;
       background: #fff;
@@ -54,6 +53,34 @@
       align-items: center;
       justify-content: center;
       gap: 0.75rem 1rem;
+    }
+
+    .capture-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 0.7rem;
+      border: none;
+      padding: 0.5rem;
+      line-height: 1;
+      white-space: nowrap;
+      writing-mode: horizontal-tb;
+      border-radius: 50%;
+      width: 56px;
+      height: 56px;
+    }
+
+    .capture-btn:active {
+      filter: brightness(0.6);
+    }
+
+    .capture-btn-a {
+      background-color: #ff0000;
+    }
+
+    .capture-btn-b {
+      background-color: #0000ff;
     }
 
     .slider-group {
@@ -94,6 +121,42 @@
       width: 100%;
     }
 
+    .upload-chip {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 2;
+      border: none;
+      border-radius: 999px;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.68);
+      cursor: pointer;
+    }
+
+    .upload-chip:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .canvas-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1rem;
+      color: #666;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .canvas-placeholder.is-hidden {
+      display: none;
+    }
+
     .preview-item span {
       font-size: 0.75rem;
     }
@@ -128,40 +191,11 @@
       box-sizing: border-box;
       border: 1px solid #ccc;
       background: #f5f5f5;
-      object-fit: cover;
       display: block;
     }
 
-    #captureABtn {
-      background-color: #ff0000;
-      color: white;
-      border: none;
-      padding: 0.5rem;
-      font-size: 2rem;
-      border-radius: 50%;
-      width: 56px;
-      height: 56px;
-      aspect-ratio: 1 / 1;
-    }
-
-    #captureABtn:active {
-      background-color: #5b2b2b;
-    }
-
-    #captureBBtn {
-      background-color: #0000ff;
-      color: white;
-      border: none;
-      padding: 0.5rem;
-      font-size: 2rem;
-      border-radius: 50%;
-      width: 56px;
-      height: 56px;
-      aspect-ratio: 1 / 1;
-    }
-
-    #captureBBtn:active {
-      background-color: #35358c;
+    .preview-item video {
+      object-fit: cover;
     }
 
     @media (min-width: 721px) {
@@ -208,6 +242,8 @@
       <div class="preview-item">
         <div class="camera-panel">
           <canvas id="shotA"></canvas>
+          <button id="uploadABtn" class="upload-chip" type="button">ファイルから追加</button>
+          <button id="shotAPlaceholder" class="canvas-placeholder" type="button">ファイルから画像を追加</button>
           <div id="shotAExpressionStatus" class="expression-badge">未撮影</div>
         </div>
         <span>A</span>
@@ -216,6 +252,8 @@
       <div class="preview-item">
         <div class="camera-panel">
           <canvas id="shotB"></canvas>
+          <button id="uploadBBtn" class="upload-chip" type="button">ファイルから追加</button>
+          <button id="shotBPlaceholder" class="canvas-placeholder" type="button">ファイルから画像を追加</button>
           <div id="shotBExpressionStatus" class="expression-badge">未撮影</div>
         </div>
         <span>B</span>
@@ -230,8 +268,8 @@
 
   <footer>
     <div class="controls">
-      <button id="captureABtn" type="button">A</button>
-      <button id="captureBBtn" type="button">B</button>
+      <button id="captureABtnFooter" class="capture-btn capture-btn-a" type="button">Aを撮影</button>
+      <button id="captureBBtnFooter" class="capture-btn capture-btn-b" type="button">Bを撮影</button>
 
       <div class="slider-group">
         <input id="tRange" type="range" min="0" max="1" step="0.01" value="0.5" />
@@ -239,6 +277,9 @@
       </div>
     </div>
   </footer>
+
+  <input id="fileInputA" type="file" accept=".png,image/png" hidden />
+  <input id="fileInputB" type="file" accept=".png,image/png" hidden />
 
   <script src="./face-api.min.js"></script>
   <script type="module">
@@ -250,14 +291,20 @@
     const OUTPUT_RATIO = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 
     const video = document.getElementById("video");
-    const captureABtn = document.getElementById("captureABtn");
-    const captureBBtn = document.getElementById("captureBBtn");
+    const captureABtnFooter = document.getElementById("captureABtnFooter");
+    const captureBBtnFooter = document.getElementById("captureBBtnFooter");
+    const uploadABtn = document.getElementById("uploadABtn");
+    const uploadBBtn = document.getElementById("uploadBBtn");
+    const fileInputA = document.getElementById("fileInputA");
+    const fileInputB = document.getElementById("fileInputB");
 
     const tRange = document.getElementById("tRange");
     const tValue = document.getElementById("tValue");
 
     const shotACanvas = document.getElementById("shotA");
     const shotBCanvas = document.getElementById("shotB");
+    const shotAPlaceholder = document.getElementById("shotAPlaceholder");
+    const shotBPlaceholder = document.getElementById("shotBPlaceholder");
     const resultCanvas = document.getElementById("canvas");
     const resultCtx = resultCanvas.getContext("2d");
     const expressionStatus = document.getElementById("expressionStatus");
@@ -281,6 +328,10 @@
 
     let imgA = null;
     let imgB = null;
+
+    function setPlaceholderVisible(placeholderEl, isVisible) {
+      placeholderEl.classList.toggle("is-hidden", !isVisible);
+    }
 
     function syncSliderLabel() {
       tValue.textContent = Number(tRange.value).toFixed(2);
@@ -416,6 +467,18 @@
       return formatExpressionSummary(currentExpressions);
     }
 
+    async function detectExpressionSummaryFromSource(source) {
+      const detection = await faceapi
+        .detectSingleFace(source, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+
+      if (!detection || Object.keys(detection.expressions).length === 0) {
+        return '<span class="expression-line">感情未検出</span>';
+      }
+
+      return formatExpressionSummary(detection.expressions);
+    }
+
     function startExpressionDetection() {
       if (expressionDetectionTimer) return;
 
@@ -434,8 +497,7 @@
             return;
           }
 
-          const entries = Object.entries(detection.expressions);
-          if (entries.length === 0) {
+          if (Object.keys(detection.expressions).length === 0) {
             updateExpressionStatus(null);
             return;
           }
@@ -474,22 +536,24 @@
       return ctx;
     }
 
-    function captureFrameToCanvas(targetCanvas) {
-      const srcWidth = video.videoWidth;
-      const srcHeight = video.videoHeight;
+    function drawImageCover(targetCanvas, source) {
+      const srcWidth = source.videoWidth || source.naturalWidth || source.width;
+      const srcHeight = source.videoHeight || source.naturalHeight || source.height;
 
       if (!srcWidth || !srcHeight) {
-        throw new Error("カメラ映像の取得に失敗しました。");
+        throw new Error("画像の読み込みに失敗しました。");
       }
 
       const { sx, sy, sw, sh } = getCenteredCropRect(srcWidth, srcHeight, OUTPUT_RATIO);
       const ctx = prepareOutputCanvas(targetCanvas);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    }
 
-      ctx.drawImage(
-        video,
-        sx, sy, sw, sh,
-        0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT
-      );
+    function captureFrameToCanvas(targetCanvas) {
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error("カメラ映像の取得に失敗しました。");
+      }
+      drawImageCover(targetCanvas, video);
     }
 
     async function canvasToImage(canvas) {
@@ -498,6 +562,59 @@
         throw new Error("画像化に失敗しました。");
       }
       return await createImageBitmap(blob);
+    }
+
+    async function fileToImageBitmap(file) {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      try {
+        await new Promise((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("画像ファイルの読み込みに失敗しました。"));
+          image.src = objectUrl;
+        });
+
+        return await createImageBitmap(image);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    async function setShotFromCanvas(targetCanvas, statusEl, placeholderEl, assignImage, expressionHtml) {
+      const nextExpressionHtml = expressionHtml ?? await detectExpressionSummaryFromSource(targetCanvas);
+      statusEl.innerHTML = nextExpressionHtml;
+      setPlaceholderVisible(placeholderEl, false);
+      assignImage(await canvasToImage(targetCanvas));
+
+      if (imgA && imgB) {
+        renderMorph();
+      }
+    }
+
+    async function loadFileToShot(file, targetCanvas, statusEl, placeholderEl, assignImage) {
+      if (!file) return;
+
+      const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
+      if (!isPng) {
+        alert("PNG ファイルのみ追加できます。");
+        return;
+      }
+
+      try {
+        const bitmap = await fileToImageBitmap(file);
+        drawImageCover(targetCanvas, bitmap);
+        await setShotFromCanvas(
+          targetCanvas,
+          statusEl,
+          placeholderEl,
+          assignImage
+        );
+        bitmap.close();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "画像の追加に失敗しました。");
+      }
     }
 
     function getLandmarks(imgLike) {
@@ -643,34 +760,87 @@
       }
     }
 
-    captureABtn.addEventListener("click", async () => {
+    async function captureShotA() {
       try {
         captureFrameToCanvas(shotACanvas);
-        shotAExpressionStatus.innerHTML = snapshotExpressionText();
-        imgA = await canvasToImage(shotACanvas);
-
-        if (imgA && imgB) {
-          renderMorph();
-        }
+        await setShotFromCanvas(
+          shotACanvas,
+          shotAExpressionStatus,
+          shotAPlaceholder,
+          (nextImage) => {
+            imgA = nextImage;
+          },
+          snapshotExpressionText()
+        );
       } catch (err) {
         console.error(err);
         alert(err.message || "Aの撮影に失敗しました。");
       }
-    });
+    }
 
-    captureBBtn.addEventListener("click", async () => {
+    async function captureShotB() {
       try {
         captureFrameToCanvas(shotBCanvas);
-        shotBExpressionStatus.innerHTML = snapshotExpressionText();
-        imgB = await canvasToImage(shotBCanvas);
-
-        if (imgA && imgB) {
-          renderMorph();
-        }
+        await setShotFromCanvas(
+          shotBCanvas,
+          shotBExpressionStatus,
+          shotBPlaceholder,
+          (nextImage) => {
+            imgB = nextImage;
+          },
+          snapshotExpressionText()
+        );
       } catch (err) {
         console.error(err);
         alert(err.message || "Bの撮影に失敗しました。");
       }
+    }
+
+    captureABtnFooter.addEventListener("click", captureShotA);
+    captureBBtnFooter.addEventListener("click", captureShotB);
+
+    uploadABtn.addEventListener("click", () => {
+      fileInputA.click();
+    });
+
+    uploadBBtn.addEventListener("click", () => {
+      fileInputB.click();
+    });
+
+    shotAPlaceholder.addEventListener("click", () => {
+      fileInputA.click();
+    });
+
+    shotBPlaceholder.addEventListener("click", () => {
+      fileInputB.click();
+    });
+
+    fileInputA.addEventListener("change", async (event) => {
+      const [file] = event.target.files ?? [];
+      await loadFileToShot(
+        file,
+        shotACanvas,
+        shotAExpressionStatus,
+        shotAPlaceholder,
+        (nextImage) => {
+          imgA = nextImage;
+        }
+      );
+      event.target.value = "";
+    });
+
+    fileInputB.addEventListener("change", async (event) => {
+      const [file] = event.target.files ?? [];
+      await loadFileToShot(
+        file,
+        shotBCanvas,
+        shotBExpressionStatus,
+        shotBPlaceholder,
+        (nextImage) => {
+          imgB = nextImage;
+        }
+      );
+      event.target.value = "";
     });
 
     initializeApp();
