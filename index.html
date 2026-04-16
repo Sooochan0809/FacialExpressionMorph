@@ -4,27 +4,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>表情モーフィング</title>
+  <title>FacialExpressionMorphing</title>
   <style>
-    :root {
-      --shot-width: 300px;
-      --shot-height: 400px;
-    }
-
     body {
       margin: 0;
-      padding: 2rem;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      margin: 0;
+      padding: 1rem;
       font-family: sans-serif;
       background: #fff;
       color: #111;
+    }
+
+    header {
+      display: flex;
+      padding: 1rem;
+      height: 72px;
+      background: #bbbbbb;
+      align-items: center;
+      justify-content: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: normal;
+    }
+
+    footer {
+      display: flex;
+      padding: 1rem;
+      height: 80px;
+      background: #bbbbbb;
+      align-items: center;
+      justify-content: center;
     }
 
     .controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: center;
       gap: 0.75rem 1rem;
-      margin-bottom: 1rem;
     }
 
     .slider-group {
@@ -33,73 +62,140 @@
       gap: 0.5rem;
     }
 
-    .camera-wrap {
-      margin-bottom: 1rem;
+    .preview-row {
+      display: flex;
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      gap: 1rem;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 0.5rem;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity;
     }
 
-    video,
-    .preview-row canvas,
-    #canvas {
-      width: var(--shot-width);
-      height: var(--shot-height);
+    .preview-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+      width: calc(100vw - 2rem);
+      max-width: 420px;
+    }
+
+    .preview-item span {
+      font-size: 0.75rem;
+    }
+
+    .preview-item video,
+    .preview-item canvas {
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      height: auto;
+      box-sizing: border-box;
       border: 1px solid #ccc;
       background: #f5f5f5;
       object-fit: cover;
       display: block;
     }
 
-    .preview-row {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-      margin-bottom: 1rem;
+    #captureABtn {
+      background-color: #ff0000;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      font-size: 2rem;
+      border-radius: 50%;
+      width: 56px;
+      height: 56px;
+      aspect-ratio: 1 / 1;
     }
 
-    .preview-item {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
+    #captureBBtn {
+      background-color: #0000ff;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      font-size: 2rem;
+      border-radius: 50%;
+      width: 56px;
+      height: 56px;
+      aspect-ratio: 1 / 1;
     }
 
-    .preview-item span {
-      font-size: 0.9rem;
+    @media (min-width: 721px) {
+      .preview-row {
+        justify-content: center;
+      }
+
+      .preview-item {
+        width: min(420px, calc((100vw - 5rem) / 2));
+      }
+    }
+
+    @media (max-width: 600px) {
+      header {
+        height: 32px;
+      }
+
+      header h1 {
+        font-size: 1rem;
+      }
+
+      footer {
+        height: auto;
+        padding: 0.5rem;
+      }
     }
   </style>
 </head>
 
 <body>
-  <div class="camera-wrap">
-    <video id="video" autoplay playsinline muted></video>
-  </div>
+  <header>
+    <h1>FacialExpressionMorphing</h1>
+  </header>
+  <main>
+    <div class="preview-row">
+      <div class="preview-item">
+        <video id="video" autoplay playsinline muted></video>
+        <span>Camera</span>
+      </div>
 
-  <div class="controls">
-    <button id="startCameraBtn" type="button">カメラ開始</button>
-    <button id="captureABtn" type="button">Aを撮影</button>
-    <button id="captureBBtn" type="button">Bを撮影</button>
+      <div class="preview-item">
+        <canvas id="shotA"></canvas>
+        <span>A</span>
+      </div>
 
-    <div class="slider-group">
-      <label for="tRange">割合</label>
-      <input id="tRange" type="range" min="0" max="1" step="0.01" value="0.5" />
-      <span id="tValue">0.50</span>
-    </div>
+      <div class="preview-item">
+        <canvas id="shotB"></canvas>
+        <span>B</span>
+      </div>
 
-    <button id="runBtn" type="button">実行</button>
-  </div>
+      <div class="preview-item">
+        <canvas id="canvas"></canvas>
+        <span>Result</span>
+      </div>
+    </div>
+  </main>
 
-  <div class="preview-row">
-    <div class="preview-item">
-      <span>A</span>
-      <canvas id="shotA"></canvas>
+  <footer>
+    <div class="controls">
+      <button id="captureABtn" type="button">A</button>
+      <button id="captureBBtn" type="button">B</button>
+
+      <div class="slider-group">
+        <input id="tRange" type="range" min="0" max="1" step="0.01" value="0.5" />
+        <span id="tValue">0.50</span>
+      </div>
     </div>
-    <div class="preview-item">
-      <span>B</span>
-      <canvas id="shotB"></canvas>
-    </div>
-    <div class="preview-item">
-      <span>Result</span>
-      <canvas id="canvas"></canvas>
-    </div>
-  </div>
+  </footer>
 
   <script type="module">
     import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
@@ -110,10 +206,8 @@
     const OUTPUT_RATIO = OUTPUT_WIDTH / OUTPUT_HEIGHT;
 
     const video = document.getElementById("video");
-    const startCameraBtn = document.getElementById("startCameraBtn");
     const captureABtn = document.getElementById("captureABtn");
     const captureBBtn = document.getElementById("captureBBtn");
-    const runBtn = document.getElementById("runBtn");
 
     const tRange = document.getElementById("tRange");
     const tValue = document.getElementById("tValue");
@@ -368,7 +462,7 @@
       morphImages(imgA, imgB, pointsA, pointsB, t);
     }
 
-    startCameraBtn.addEventListener("click", async () => {
+    async function initializeApp() {
       try {
         await createLandmarker();
         await startCamera();
@@ -376,7 +470,7 @@
         console.error(err);
         alert(err.message || "カメラ開始に失敗しました。");
       }
-    });
+    }
 
     captureABtn.addEventListener("click", async () => {
       try {
@@ -406,14 +500,7 @@
       }
     });
 
-    runBtn.addEventListener("click", () => {
-      try {
-        renderMorph();
-      } catch (err) {
-        console.error(err);
-        alert(err.message || "モーフ処理に失敗しました。");
-      }
-    });
+    initializeApp();
   </script>
 </body>
 
