@@ -154,12 +154,14 @@
     }
 
     .capture-chip {
-      width: 56px;
-      height: 56px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
       border: none;
       border-radius: 999px;
-      padding: 0.45rem 0.8rem;
-      font-size: 0.75rem;
+      font-size: 0.8rem;
       line-height: 1;
       color: var(--color-text-inverse);
       cursor: pointer;
@@ -323,7 +325,7 @@
       }
     }
 
-    @media (max-width: 720px) {
+    @media (max-width: 1300px) {
       .preview-row {
         justify-content: flex-start;
       }
@@ -333,6 +335,14 @@
         height: 100%;
         width: min(calc(100cqh * 3 / 4), calc(100vw - 2rem));
         min-width: 0;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .capture-chip {
+        width: 56px;
+        height: 56px;
+        font-size: 0.65rem;
       }
     }
   </style>
@@ -456,7 +466,7 @@
 
     function updateDownloadStates() {
       Object.values(shots).forEach((shot) => {
-        shot.downloadBtn.disabled = !hasCanvasImage(shot.canvas);
+        shot.downloadBtn.disabled = !shot.image;
       });
 
       resultDownloadBtn.disabled = !(shotImages.A && shotImages.B && hasCanvasImage(resultCanvas));
@@ -724,12 +734,45 @@
       }
     }
 
+    function setCaptureButtonLabel(shot, hasCapturedImage) {
+      shot.captureBtn.textContent = hasCapturedImage ? "再撮影" : "撮影";
+    }
+
+    function resetResultCanvas() {
+      resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+      resultCanvas.width = 0;
+      resultCanvas.height = 0;
+      updateDownloadStates();
+    }
+
+    function resetShotToLive(shot) {
+      if (shot.image && typeof shot.image.close === "function") {
+        shot.image.close();
+      }
+
+      shot.image = null;
+      shot.canvas.classList.add("media-hidden");
+      shot.video.classList.remove("media-hidden");
+      shot.status.innerHTML = formatDetectedExpressions(shot.liveExpressions);
+      setCaptureButtonLabel(shot, false);
+
+      if (!shotImages.A || !shotImages.B) {
+        resetResultCanvas();
+      } else {
+        updateDownloadStates();
+      }
+    }
+
     async function setShotFromCanvas(shot, expressionHtml) {
       shot.status.innerHTML = expressionHtml ?? formatDetectedExpressions(await detectExpressionsFromSource(shot.canvas));
-      setPlaceholderVisible(shot.placeholder, false);
       shot.video.classList.add("media-hidden");
       shot.canvas.classList.remove("media-hidden");
+
+      if (shot.image && typeof shot.image.close === "function") {
+        shot.image.close();
+      }
       shot.image = await canvasToImage(shot.canvas);
+      setCaptureButtonLabel(shot, true);
 
       if (shotImages.A && shotImages.B) {
         renderMorph();
@@ -905,6 +948,11 @@
     async function captureShot(key) {
       const shot = shots[key];
       try {
+        if (shot.image) {
+          resetShotToLive(shot);
+          return;
+        }
+
         captureFrameToCanvas(shot.canvas, shot.video);
         await setShotFromCanvas(shot, formatDetectedExpressions(shot.liveExpressions));
       } catch (err) {
@@ -921,9 +969,9 @@
       });
 
       const openFilePicker = () => shot.fileInput.click();
+      setCaptureButtonLabel(shot, false);
       shot.captureBtn.addEventListener("click", () => captureShot(key));
       shot.uploadBtn.addEventListener("click", openFilePicker);
-      shot.placeholder?.addEventListener("click", openFilePicker);
       shot.downloadBtn.addEventListener("click", async () => {
         try {
           await downloadCanvas(shot.canvas, shot.fileName);
