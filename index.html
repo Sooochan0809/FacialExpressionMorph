@@ -46,14 +46,6 @@
       cursor: pointer;
     }
 
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem 1rem;
-    }
-
     .preview-row {
       display: flex;
       flex: 1;
@@ -186,35 +178,6 @@
       bottom: 0.75rem;
       transform: translateX(-50%);
       z-index: 2;
-    }
-
-    .canvas-placeholder {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 1rem;
-      color: var(--color-text-muted);
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
-
-    .canvas-placeholder.is-hidden {
-      display: none;
-    }
-
-    .preview-item span {
-      font-size: 0.75rem;
-    }
-
-    .preview-meta {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
     }
 
     .download-btn {
@@ -421,7 +384,6 @@
       A: {
         canvas: $("shotA"),
         video: liveVideos.A,
-        placeholder: null,
         status: $("shotAExpressionStatus"),
         captureBtn: $("captureABtn"),
         downloadBtn: $("downloadABtn"),
@@ -433,7 +395,6 @@
       B: {
         canvas: $("shotB"),
         video: liveVideos.B,
-        placeholder: null,
         status: $("shotBExpressionStatus"),
         captureBtn: $("captureBBtn"),
         downloadBtn: $("downloadBBtn"),
@@ -494,11 +455,6 @@
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
-    }
-
-    function setPlaceholderVisible(placeholderEl, isVisible) {
-      if (!placeholderEl) return;
-      placeholderEl.classList.toggle("is-hidden", !isVisible);
     }
 
     function syncSliderLabel() {
