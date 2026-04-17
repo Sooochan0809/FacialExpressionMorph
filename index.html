@@ -6,6 +6,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FacialExpressionMorph</title>
   <style>
+    :root {
+      color-scheme: light;
+      --color-surface: #fff;
+      --color-surface-subtle: #f5f5f5;
+      --color-surface-muted: #bbbbbb;
+      --color-text: #111;
+      --color-text-muted: #666;
+      --color-text-inverse: #fff;
+      --color-accent-a: #ff0000;
+      --color-accent-b: #0000ff;
+      --color-text-accent: #ff6b6b;
+      --color-border: #ccc;
+      --color-overlay: rgba(0, 0, 0, 0.68);
+      --color-overlay-strong: rgba(0, 0, 0, 0.8);
+    }
+
     body {
       margin: 0;
       height: 100dvh;
@@ -21,8 +37,8 @@
       min-height: 0;
       padding: 1rem;
       font-family: sans-serif;
-      background: #fff;
-      color: #111;
+      background: var(--color-surface);
+      color: var(--color-text);
       overflow: hidden;
     }
 
@@ -30,7 +46,7 @@
       display: flex;
       padding: 1rem;
       height: 40px;
-      background: #bbbbbb;
+      background: var(--color-surface-muted);
       align-items: center;
       justify-content: center;
     }
@@ -45,7 +61,7 @@
       display: flex;
       padding: 1rem;
       height: 64px;
-      background: #bbbbbb;
+      background: var(--color-surface-muted);
       align-items: center;
       justify-content: center;
     }
@@ -75,7 +91,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: white;
+      color: var(--color-text-inverse);
       font-size: 0.7rem;
       border: none;
       padding: 0.5rem;
@@ -92,11 +108,11 @@
     }
 
     .capture-btn-a {
-      background-color: #ff0000;
+      background-color: var(--color-accent-a);
     }
 
     .capture-btn-b {
-      background-color: #0000ff;
+      background-color: var(--color-accent-b);
     }
 
     .slider-group {
@@ -167,13 +183,13 @@
       padding: 0.45rem 0.8rem;
       font-size: 0.75rem;
       line-height: 1;
-      color: #fff;
-      background: rgba(0, 0, 0, 0.68);
+      color: var(--color-text-inverse);
+      background: var(--color-overlay);
       cursor: pointer;
     }
 
     .upload-chip:hover {
-      background: rgba(0, 0, 0, 0.8);
+      background: var(--color-overlay-strong);
     }
 
     .canvas-placeholder {
@@ -184,7 +200,7 @@
       justify-content: center;
       text-align: center;
       padding: 1rem;
-      color: #666;
+      color: var(--color-text-muted);
       font-size: 0.9rem;
       cursor: pointer;
     }
@@ -197,6 +213,35 @@
       font-size: 0.75rem;
     }
 
+    .preview-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .download-btn {
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .download-btn:disabled {
+      color: var(--color-text-muted);
+      border-color: var(--color-border);
+      background: var(--color-surface-subtle);
+      cursor: not-allowed;
+    }
+
+    .download-btn:not(:disabled):hover {
+      background: var(--color-surface-subtle);
+    }
+
     .expression-badge {
       position: absolute;
       left: 0.75rem;
@@ -204,8 +249,8 @@
       z-index: 1;
       padding: 0.35rem 0.6rem;
       border-radius: 0.75rem;
-      background: rgba(0, 0, 0, 0.62);
-      color: #fff;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
       font-size: 0.8rem;
       line-height: 1.2;
       letter-spacing: 0.02em;
@@ -216,7 +261,7 @@
     }
 
     .expression-line.is-primary {
-      color: #ff6b6b;
+      color: var(--color-text-accent);
     }
 
     .preview-item video,
@@ -226,8 +271,8 @@
       height: auto;
       max-height: 100%;
       box-sizing: border-box;
-      border: 1px solid #ccc;
-      background: #f5f5f5;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
       display: block;
     }
 
@@ -284,7 +329,10 @@
           <button id="shotAPlaceholder" class="canvas-placeholder" type="button">ファイルから画像を追加</button>
           <div id="shotAExpressionStatus" class="expression-badge">未撮影</div>
         </div>
-        <span>A</span>
+        <div class="preview-meta">
+          <span>A</span>
+          <button id="downloadABtn" class="download-btn" type="button" disabled>ダウンロード</button>
+        </div>
       </div>
 
       <div class="preview-item">
@@ -294,12 +342,18 @@
           <button id="shotBPlaceholder" class="canvas-placeholder" type="button">ファイルから画像を追加</button>
           <div id="shotBExpressionStatus" class="expression-badge">未撮影</div>
         </div>
-        <span>B</span>
+        <div class="preview-meta">
+          <span>B</span>
+          <button id="downloadBBtn" class="download-btn" type="button" disabled>ダウンロード</button>
+        </div>
       </div>
 
       <div class="preview-item">
         <canvas id="canvas"></canvas>
-        <span>Result</span>
+        <div class="preview-meta">
+          <span>Result</span>
+          <button id="downloadResultBtn" class="download-btn" type="button" disabled>ダウンロード</button>
+        </div>
       </div>
     </div>
   </main>
@@ -341,18 +395,23 @@
         placeholder: $("shotAPlaceholder"),
         status: $("shotAExpressionStatus"),
         captureBtn: $("captureABtnFooter"),
+        downloadBtn: $("downloadABtn"),
         uploadBtn: $("uploadABtn"),
         fileInput: $("fileInputA"),
+        fileName: "A.png",
       },
       B: {
         canvas: $("shotB"),
         placeholder: $("shotBPlaceholder"),
         status: $("shotBExpressionStatus"),
         captureBtn: $("captureBBtnFooter"),
+        downloadBtn: $("downloadBBtn"),
         uploadBtn: $("uploadBBtn"),
         fileInput: $("fileInputB"),
+        fileName: "B.png",
       },
     };
+    const resultDownloadBtn = $("downloadResultBtn");
 
     let stream = null;
     let faceLandmarker = null;
@@ -370,6 +429,42 @@
     ];
 
     const shotImages = { A: null, B: null };
+
+    function hasCanvasImage(canvas) {
+      return canvas.width > 0 && canvas.height > 0;
+    }
+
+    function updateDownloadStates() {
+      Object.values(shots).forEach((shot) => {
+        shot.downloadBtn.disabled = !hasCanvasImage(shot.canvas);
+      });
+
+      resultDownloadBtn.disabled = !(shotImages.A && shotImages.B && hasCanvasImage(resultCanvas));
+    }
+
+    async function downloadCanvas(canvas, fileName) {
+      if (!hasCanvasImage(canvas)) {
+        throw new Error("ダウンロードできる画像がありません。");
+      }
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        throw new Error("画像の書き出しに失敗しました。");
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+
+      try {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
 
     function setPlaceholderVisible(placeholderEl, isVisible) {
       placeholderEl.classList.toggle("is-hidden", !isVisible);
@@ -621,6 +716,8 @@
       if (shotImages.A && shotImages.B) {
         renderMorph();
       }
+
+      updateDownloadStates();
     }
 
     async function loadFileToShot(file, shot) {
@@ -759,6 +856,7 @@
         );
       }
       resultCtx.restore();
+      updateDownloadStates();
     }
 
     function renderMorph() {
@@ -808,6 +906,14 @@
       shot.captureBtn.addEventListener("click", () => captureShot(key));
       shot.uploadBtn.addEventListener("click", openFilePicker);
       shot.placeholder.addEventListener("click", openFilePicker);
+      shot.downloadBtn.addEventListener("click", async () => {
+        try {
+          await downloadCanvas(shot.canvas, shot.fileName);
+        } catch (err) {
+          console.error(err);
+          alert(err.message || `${key}のダウンロードに失敗しました。`);
+        }
+      });
       shot.fileInput.addEventListener("change", async (event) => {
         const [file] = event.target.files ?? [];
         await loadFileToShot(file, shot);
@@ -815,6 +921,16 @@
       });
     });
 
+    resultDownloadBtn.addEventListener("click", async () => {
+      try {
+        await downloadCanvas(resultCanvas, "Result.png");
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Resultのダウンロードに失敗しました。");
+      }
+    });
+
+    updateDownloadStates();
     initializeApp();
   </script>
 </body>
