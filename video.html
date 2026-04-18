@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FacialExpressionMorph Video</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --color-surface: #ffffff;
+      --color-surface-subtle: #f4f4f4;
+      --color-surface-muted: #e5e5e5;
+      --color-text: #111111;
+      --color-text-muted: #666666;
+      --color-text-inverse: #ffffff;
+      --color-border: #cccccc;
+      --color-overlay: rgba(0, 0, 0, 0.72);
+      --color-accent-a: rgba(255, 0, 0, 0.9);
+      --color-accent-b: rgba(0, 0, 255, 0.9);
+      --color-accent-result: #1f1f1f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem;
+      font-family: sans-serif;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .global-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-left: auto;
+      justify-content: flex-end;
+    }
+
+    .action-btn {
+      border-radius: 999px;
+      padding: 0.55rem 0.9rem;
+      color: var(--color-text-inverse);
+      background: var(--color-accent-result);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .timeline-box {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      border-radius: 1rem;
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+      flex-wrap: wrap;
+    }
+
+    .timeline-box input[type="range"] {
+      width: min(340px, 60vw);
+    }
+
+    .timeline-label {
+      width: auto;
+      min-width: 0;
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    .preview-row {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 1rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .preview-item {
+      flex: 1 1 0;
+      min-width: min(320px, calc(100vw - 2rem));
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .panel {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      border-radius: 1.2rem;
+      overflow: hidden;
+      background: var(--color-surface-subtle);
+      border: 1px solid var(--color-border);
+    }
+
+    .panel-media {
+      position: absolute;
+      inset: 0;
+    }
+
+    .panel video,
+    .panel canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      background: var(--color-surface-subtle);
+    }
+
+    .panel-top-right {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 2;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .panel-bottom-center {
+      position: absolute;
+      left: 50%;
+      bottom: 0.75rem;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      justify-content: center;
+    }
+
+    .import-chip-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 999px;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      color: var(--color-text-inverse);
+      cursor: pointer;
+      background: var(--color-overlay);
+    }
+
+    .chip-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      border: none;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      line-height: 1;
+      color: var(--color-text-inverse);
+      cursor: pointer;
+      background: var(--color-overlay);
+    }
+
+    .chip-btn-a {
+      background: var(--color-accent-a);
+    }
+
+    .chip-btn-b {
+      background: var(--color-accent-b);
+    }
+
+    .chip-btn:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .chip-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .capture-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 1rem;
+      color: var(--color-text-inverse);
+      background: rgba(0, 0, 0, 0.22);
+      font-size: clamp(2rem, 10vw, 4.5rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    }
+
+    .capture-overlay-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .capture-overlay-sub {
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .result-overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 0.75rem;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.55rem 0.85rem;
+      border-radius: 1rem;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
+      width: min(86%, 320px);
+    }
+
+    .result-overlay input[type="range"] {
+      width: 100%;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1200px) {
+      .preview-row {
+        justify-content: flex-start;
+      }
+
+      .preview-item {
+        flex: 0 0 auto;
+        width: min(380px, calc(100vw - 2rem));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 0.75rem;
+      }
+
+      header {
+        order: 1;
+      }
+
+      .preview-row {
+        order: 2;
+      }
+
+      .timeline-box {
+        order: 3;
+      }
+
+      .preview-item {
+        width: min(92vw, 360px);
+      }
+
+      .timeline-box input[type="range"] {
+        width: min(200px, 72vw);
+      }
+
+      .action-btn {
+        padding: 0.45rem 0.75rem;
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>FacialExpressionMorph Video</h1>
+  </header>
+
+  <div class="timeline-box">
+    <label for="timeRange">時間</label>
+    <input id="timeRange" type="range" min="0" max="0" step="0.001" value="0" disabled />
+    <span id="timeLabel" class="timeline-label">0.00s / 0.00s</span>
+    <div class="global-controls">
+      <button id="generateResultBtn" class="action-btn" type="button" disabled>書き出し</button>
+      <button id="downloadResultBtn" class="action-btn" type="button" disabled>保存</button>
+    </div>
+  </div>
+
+  <div class="preview-row">
+    <div class="preview-item">
+      <div class="panel">
+        <div class="panel-media">
+          <video id="videoA" playsinline muted preload="metadata"></video>
+        </div>
+        <div class="panel-top-right">
+          <button id="uploadABtn" class="import-chip-btn" type="button">ファイルから追加</button>
+        </div>
+        <div class="panel-bottom-center">
+          <button id="recordABtn" class="chip-btn chip-btn-a" type="button">撮影</button>
+        </div>
+        <div id="captureOverlayA" class="capture-overlay hidden">
+          <div class="capture-overlay-text">
+            <span id="captureOverlayAText">3</span>
+            <span id="captureOverlayASub" class="capture-overlay-sub">まもなく撮影します</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-item">
+      <div class="panel">
+        <div class="panel-media">
+          <video id="videoB" playsinline muted preload="metadata"></video>
+        </div>
+        <div class="panel-top-right">
+          <button id="uploadBBtn" class="import-chip-btn" type="button">ファイルから追加</button>
+        </div>
+        <div class="panel-bottom-center">
+          <button id="recordBBtn" class="chip-btn chip-btn-b" type="button">撮影</button>
+        </div>
+        <div id="captureOverlayB" class="capture-overlay hidden">
+          <div class="capture-overlay-text">
+            <span id="captureOverlayBText">3</span>
+            <span id="captureOverlayBSub" class="capture-overlay-sub">まもなく撮影します</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-item">
+      <div class="panel">
+        <div class="panel-media">
+          <canvas id="resultCanvas"></canvas>
+          <video id="resultVideo" class="hidden" playsinline controls loop></video>
+        </div>
+        <div class="result-overlay">
+          <span id="blendLabel">A 50% / B 50%</span>
+          <input id="blendRange" type="range" min="0" max="1" step="0.01" value="0.5" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="fileInputA" type="file" accept="video/*" hidden />
+  <input id="fileInputB" type="file" accept="video/*" hidden />
+
+  <canvas id="frameCanvasA" class="hidden"></canvas>
+  <canvas id="frameCanvasB" class="hidden"></canvas>
+
+  <script type="module">
+    import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
+    import Delaunator from "https://cdn.jsdelivr.net/npm/delaunator@5/+esm";
+
+    const OUTPUT_WIDTH = 300;
+    const OUTPUT_HEIGHT = 400;
+    const OUTPUT_RATIO = OUTPUT_WIDTH / OUTPUT_HEIGHT;
+    const LANDMARK_REFRESH_MS = 120;
+    const MIN_VIDEO_TIME_DELTA = 1 / 120;
+    const EXPORT_FPS = 15;
+    const EXPORT_MIME_TYPE = "video/webm;codecs=vp9";
+    const COUNTDOWN_SECONDS = 3;
+    const RECORDING_DURATION_MS = 2000;
+
+    const $ = (id) => document.getElementById(id);
+
+    const videoA = $("videoA");
+    const videoB = $("videoB");
+    const fileInputA = $("fileInputA");
+    const fileInputB = $("fileInputB");
+    const uploadABtn = $("uploadABtn");
+    const uploadBBtn = $("uploadBBtn");
+    const recordABtn = $("recordABtn");
+    const recordBBtn = $("recordBBtn");
+    const generateResultBtn = $("generateResultBtn");
+    const downloadResultBtn = $("downloadResultBtn");
+    const timeRange = $("timeRange");
+    const timeLabel = $("timeLabel");
+    const blendRange = $("blendRange");
+    const blendLabel = $("blendLabel");
+    const resultCanvas = $("resultCanvas");
+    const resultCtx = resultCanvas.getContext("2d");
+    const resultVideo = $("resultVideo");
+    const frameCanvasA = $("frameCanvasA");
+    const frameCanvasB = $("frameCanvasB");
+    const captureOverlayA = $("captureOverlayA");
+    const captureOverlayAText = $("captureOverlayAText");
+    const captureOverlayASub = $("captureOverlayASub");
+    const captureOverlayB = $("captureOverlayB");
+    const captureOverlayBText = $("captureOverlayBText");
+    const captureOverlayBSub = $("captureOverlayBSub");
+
+    const videoState = {
+      A: {
+        video: videoA,
+        input: fileInputA,
+        uploadBtn: uploadABtn,
+        recordBtn: recordABtn,
+        overlay: captureOverlayA,
+        overlayText: captureOverlayAText,
+        overlaySub: captureOverlayASub,
+        url: null,
+        ready: false,
+      },
+      B: {
+        video: videoB,
+        input: fileInputB,
+        uploadBtn: uploadBBtn,
+        recordBtn: recordBBtn,
+        overlay: captureOverlayB,
+        overlayText: captureOverlayBText,
+        overlaySub: captureOverlayBSub,
+        url: null,
+        ready: false,
+      },
+    };
+
+    let faceLandmarker = null;
+    let isRenderingFrame = false;
+    let resultVideoUrl = null;
+    let activeCaptureKey = null;
+    const landmarkCache = {
+      A: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
+      B: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
+    };
+
+    function formatSeconds(seconds) {
+      if (!Number.isFinite(seconds)) return "0.00s";
+      return `${seconds.toFixed(2)}s`;
+    }
+
+    function hasReadyVideos() {
+      return videoState.A.ready && videoState.B.ready;
+    }
+
+    function getMorphDuration() {
+      if (!hasReadyVideos()) return 0;
+      return Math.min(videoA.duration || 0, videoB.duration || 0);
+    }
+
+    function syncBlendLabel() {
+      const t = Number(blendRange.value);
+      const ratioA = Math.round((1 - t) * 100);
+      const ratioB = Math.round(t * 100);
+      blendLabel.textContent = `A ${ratioA}% / B ${ratioB}%`;
+    }
+
+    function updateTimelineUI() {
+      const duration = getMorphDuration();
+      const current = duration > 0 ? Math.min(Number(timeRange.value), duration) : 0;
+      timeRange.max = String(duration);
+      timeRange.disabled = duration === 0;
+      timeLabel.textContent = `${formatSeconds(current)} / ${formatSeconds(duration)}`;
+    }
+
+    function updateActionButtons() {
+      generateResultBtn.disabled = !hasReadyVideos() || isRenderingFrame;
+      downloadResultBtn.disabled = !resultVideoUrl || isRenderingFrame;
+      Object.values(videoState).forEach((state) => {
+        const disabled = isRenderingFrame || activeCaptureKey !== null;
+        state.uploadBtn.disabled = disabled;
+        state.recordBtn.disabled = disabled;
+      });
+    }
+
+    function normalizePlayback(video) {
+      if (!video) return;
+      video.defaultPlaybackRate = 1;
+      video.playbackRate = 1;
+    }
+
+    function setCaptureOverlay(key, text = "", subText = "") {
+      const state = videoState[key];
+      if (!state) return;
+
+      if (!text) {
+        state.overlay.classList.add("hidden");
+        return;
+      }
+
+      state.overlayText.textContent = text;
+      state.overlaySub.textContent = subText;
+      state.overlay.classList.remove("hidden");
+    }
+
+    function clearVideoSource(state) {
+      if (state.url) {
+        URL.revokeObjectURL(state.url);
+        state.url = null;
+      }
+
+      if (state.video.srcObject) {
+        const tracks = state.video.srcObject.getTracks?.() ?? [];
+        tracks.forEach((track) => track.stop());
+        state.video.srcObject = null;
+      }
+
+      state.video.removeAttribute("src");
+      state.video.load();
+      normalizePlayback(state.video);
+    }
+
+    function setGeneratedResultVideo(url = null) {
+      if (resultVideoUrl) {
+        URL.revokeObjectURL(resultVideoUrl);
+        resultVideoUrl = null;
+      }
+
+      if (!url) {
+        resultVideo.removeAttribute("src");
+        resultVideo.load();
+        resultVideo.classList.add("hidden");
+        resultCanvas.classList.remove("hidden");
+        updateActionButtons();
+        return;
+      }
+
+      resultVideoUrl = url;
+      resultVideo.src = url;
+      normalizePlayback(resultVideo);
+      resultVideo.classList.remove("hidden");
+      resultCanvas.classList.add("hidden");
+      updateActionButtons();
+    }
+
+    function resetLandmarkCache(key = null) {
+      if (key) {
+        landmarkCache[key].points = null;
+        landmarkCache[key].lastDetectionAt = 0;
+        landmarkCache[key].lastVideoTime = -1;
+        return;
+      }
+
+      Object.keys(landmarkCache).forEach((cacheKey) => {
+        resetLandmarkCache(cacheKey);
+      });
+    }
+
+    async function createLandmarker() {
+      if (faceLandmarker) return faceLandmarker;
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+
+      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        },
+        runningMode: "IMAGE",
+        numFaces: 1,
+      });
+
+      return faceLandmarker;
+    }
+
+    function getCenteredCropRect(srcWidth, srcHeight, targetRatio) {
+      const srcRatio = srcWidth / srcHeight;
+
+      if (srcRatio > targetRatio) {
+        const cropHeight = srcHeight;
+        const cropWidth = cropHeight * targetRatio;
+        const sx = (srcWidth - cropWidth) / 2;
+        return { sx, sy: 0, sw: cropWidth, sh: cropHeight };
+      }
+
+      const cropWidth = srcWidth;
+      const cropHeight = cropWidth / targetRatio;
+      const sy = (srcHeight - cropHeight) / 2;
+      return { sx: 0, sy, sw: cropWidth, sh: cropHeight };
+    }
+
+    function drawImageCover(targetCanvas, source) {
+      const srcWidth = source.videoWidth || source.naturalWidth || source.width;
+      const srcHeight = source.videoHeight || source.naturalHeight || source.height;
+
+      if (!srcWidth || !srcHeight) {
+        throw new Error("動画フレームの読み込みに失敗しました。");
+      }
+
+      targetCanvas.width = OUTPUT_WIDTH;
+      targetCanvas.height = OUTPUT_HEIGHT;
+      const { sx, sy, sw, sh } = getCenteredCropRect(srcWidth, srcHeight, OUTPUT_RATIO);
+      const ctx = targetCanvas.getContext("2d");
+      ctx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    }
+
+    function getLandmarks(sourceCanvas) {
+      const result = faceLandmarker.detect(sourceCanvas);
+
+      if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
+        throw new Error("顔が検出できませんでした。");
+      }
+
+      const points = result.faceLandmarks[0].map((p) => [
+        p.x * OUTPUT_WIDTH,
+        p.y * OUTPUT_HEIGHT,
+      ]);
+
+      points.push([0, 0]);
+      points.push([OUTPUT_WIDTH - 1, 0]);
+      points.push([OUTPUT_WIDTH - 1, OUTPUT_HEIGHT - 1]);
+      points.push([0, OUTPUT_HEIGHT - 1]);
+
+      return points;
+    }
+
+    function shouldRefreshLandmarks(cacheEntry, videoTime, now) {
+      if (!cacheEntry.points) return true;
+      if (now - cacheEntry.lastDetectionAt >= LANDMARK_REFRESH_MS) return true;
+      return Math.abs(videoTime - cacheEntry.lastVideoTime) >= MIN_VIDEO_TIME_DELTA;
+    }
+
+    function getCachedLandmarks(key, video, sourceCanvas) {
+      const cacheEntry = landmarkCache[key];
+      const now = performance.now();
+      const videoTime = video.currentTime || 0;
+
+      if (!shouldRefreshLandmarks(cacheEntry, videoTime, now)) {
+        return cacheEntry.points;
+      }
+
+      const points = getLandmarks(sourceCanvas);
+      cacheEntry.points = points;
+      cacheEntry.lastDetectionAt = now;
+      cacheEntry.lastVideoTime = videoTime;
+      return points;
+    }
+
+    function interpolatePoints(pointsA, pointsB, t) {
+      if (pointsA.length !== pointsB.length) {
+        throw new Error("ランドマーク数が一致しません。");
+      }
+
+      return pointsA.map((pointA, index) => {
+        const pointB = pointsB[index];
+        return [
+          pointA[0] * (1 - t) + pointB[0] * t,
+          pointA[1] * (1 - t) + pointB[1] * t,
+        ];
+      });
+    }
+
+    function clipTriangle(ctx, triangle) {
+      ctx.beginPath();
+      ctx.moveTo(triangle[0][0], triangle[0][1]);
+      ctx.lineTo(triangle[1][0], triangle[1][1]);
+      ctx.lineTo(triangle[2][0], triangle[2][1]);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    function drawTriangleImage(ctx, image, srcTri, dstTri) {
+      const [sx0, sy0] = srcTri[0];
+      const [sx1, sy1] = srcTri[1];
+      const [sx2, sy2] = srcTri[2];
+
+      const [dx0, dy0] = dstTri[0];
+      const [dx1, dy1] = dstTri[1];
+      const [dx2, dy2] = dstTri[2];
+
+      const denom =
+        sx0 * (sy1 - sy2) +
+        sx1 * (sy2 - sy0) +
+        sx2 * (sy0 - sy1);
+
+      if (Math.abs(denom) < 1e-6) return;
+
+      const a = (dx0 * (sy1 - sy2) + dx1 * (sy2 - sy0) + dx2 * (sy0 - sy1)) / denom;
+      const b = (dy0 * (sy1 - sy2) + dy1 * (sy2 - sy0) + dy2 * (sy0 - sy1)) / denom;
+      const c = (dx0 * (sx2 - sx1) + dx1 * (sx0 - sx2) + dx2 * (sx1 - sx0)) / denom;
+      const d = (dy0 * (sx2 - sx1) + dy1 * (sx0 - sx2) + dy2 * (sx1 - sx0)) / denom;
+      const e = (dx0 * (sx1 * sy2 - sx2 * sy1) + dx1 * (sx2 * sy0 - sx0 * sy2) + dx2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+      const f = (dy0 * (sx1 * sy2 - sx2 * sy1) + dy1 * (sx2 * sy0 - sx0 * sy2) + dy2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+
+      ctx.save();
+      clipTriangle(ctx, dstTri);
+      ctx.setTransform(a, b, c, d, e, f);
+      ctx.drawImage(image, 0, 0);
+      ctx.restore();
+    }
+
+    function morphFrames(frameA, frameB, pointsA, pointsB, t) {
+      if (resultCanvas.width !== OUTPUT_WIDTH || resultCanvas.height !== OUTPUT_HEIGHT) {
+        resultCanvas.width = OUTPUT_WIDTH;
+        resultCanvas.height = OUTPUT_HEIGHT;
+      }
+      resultCtx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+
+      const midPoints = interpolatePoints(pointsA, pointsB, t);
+      const delaunay = Delaunator.from(midPoints);
+      const triangles = delaunay.triangles;
+
+      resultCtx.save();
+      resultCtx.globalAlpha = 1 - t;
+      for (let i = 0; i < triangles.length; i += 3) {
+        const i0 = triangles[i];
+        const i1 = triangles[i + 1];
+        const i2 = triangles[i + 2];
+
+        drawTriangleImage(
+          resultCtx,
+          frameA,
+          [pointsA[i0], pointsA[i1], pointsA[i2]],
+          [midPoints[i0], midPoints[i1], midPoints[i2]]
+        );
+      }
+      resultCtx.restore();
+
+      resultCtx.save();
+      resultCtx.globalAlpha = t;
+      for (let i = 0; i < triangles.length; i += 3) {
+        const i0 = triangles[i];
+        const i1 = triangles[i + 1];
+        const i2 = triangles[i + 2];
+
+        drawTriangleImage(
+          resultCtx,
+          frameB,
+          [pointsB[i0], pointsB[i1], pointsB[i2]],
+          [midPoints[i0], midPoints[i1], midPoints[i2]]
+        );
+      }
+      resultCtx.restore();
+    }
+
+    async function seekVideo(video, time) {
+      const safeTime = Math.max(0, time);
+      if (Math.abs(video.currentTime - safeTime) < 0.001) return;
+
+      await new Promise((resolve, reject) => {
+        const handleSeeked = () => {
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error("動画シークに失敗しました。"));
+        };
+        const cleanup = () => {
+          video.removeEventListener("seeked", handleSeeked);
+          video.removeEventListener("error", handleError);
+        };
+
+        video.addEventListener("seeked", handleSeeked, { once: true });
+        video.addEventListener("error", handleError, { once: true });
+        video.currentTime = safeTime;
+      });
+    }
+
+    async function renderFrameAtTime(time, { force = false } = {}) {
+      if (!hasReadyVideos() || (isRenderingFrame && !force)) return;
+
+      const shouldManageLock = !force;
+      if (shouldManageLock) {
+        isRenderingFrame = true;
+      }
+
+      try {
+        await createLandmarker();
+        await Promise.all([seekVideo(videoA, time), seekVideo(videoB, time)]);
+        drawImageCover(frameCanvasA, videoA);
+        drawImageCover(frameCanvasB, videoB);
+
+        const pointsA = getCachedLandmarks("A", videoA, frameCanvasA);
+        const pointsB = getCachedLandmarks("B", videoB, frameCanvasB);
+        morphFrames(frameCanvasA, frameCanvasB, pointsA, pointsB, Number(blendRange.value));
+
+        resultCanvas.classList.remove("hidden");
+        resultVideo.classList.add("hidden");
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (shouldManageLock) {
+          isRenderingFrame = false;
+        }
+        updateActionButtons();
+      }
+    }
+
+    async function syncCurrentTime(nextTime) {
+      const duration = getMorphDuration();
+      const safeTime = Math.max(0, Math.min(nextTime, duration || 0));
+
+      if (hasReadyVideos()) {
+        resetLandmarkCache();
+        timeRange.value = String(safeTime);
+        updateTimelineUI();
+        await renderFrameAtTime(safeTime);
+      } else {
+        timeRange.value = "0";
+        updateTimelineUI();
+      }
+    }
+
+    async function handleVideoUpload(key, file) {
+      if (!file) return;
+
+      const state = videoState[key];
+      const label = key === "A" ? "A" : "B";
+
+      state.ready = false;
+      clearVideoSource(state);
+      state.url = URL.createObjectURL(file);
+      state.video.src = state.url;
+      state.video.load();
+      normalizePlayback(state.video);
+      resetLandmarkCache(key);
+
+      try {
+        await new Promise((resolve, reject) => {
+          state.video.onloadedmetadata = () => resolve();
+          state.video.onerror = () => reject(new Error(`${label}動画の読み込みに失敗しました。`));
+        });
+
+        state.ready = true;
+        updateTimelineUI();
+        updateActionButtons();
+
+        if (hasReadyVideos()) {
+          const duration = getMorphDuration();
+          timeRange.value = "0";
+          timeRange.max = String(duration);
+          setGeneratedResultVideo(null);
+          await syncCurrentTime(0);
+        }
+      } catch (error) {
+        state.ready = false;
+        updateActionButtons();
+        throw error;
+      }
+    }
+
+    function getSupportedRecordedMimeType() {
+      if (typeof MediaRecorder === "undefined") return "";
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) return "video/webm;codecs=vp9";
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) return "video/webm;codecs=vp8";
+      if (MediaRecorder.isTypeSupported("video/webm")) return "video/webm";
+      return "";
+    }
+
+    async function recordVideoForKey(key) {
+      if (activeCaptureKey || isRenderingFrame) return;
+
+      const state = videoState[key];
+      const label = key === "A" ? "A" : "B";
+      const mimeType = getSupportedRecordedMimeType();
+      if (!mimeType) {
+        throw new Error("このブラウザではカメラ撮影に対応していません。");
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("このブラウザではカメラにアクセスできません。");
+      }
+
+      activeCaptureKey = key;
+      state.ready = false;
+      setGeneratedResultVideo(null);
+      updateActionButtons();
+
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 720 },
+            height: { ideal: 1280 },
+            facingMode: "user",
+          },
+          audio: false,
+        });
+
+        clearVideoSource(state);
+        state.video.srcObject = stream;
+        state.video.muted = true;
+        normalizePlayback(state.video);
+        await state.video.play();
+
+        for (let count = COUNTDOWN_SECONDS; count >= 1; count -= 1) {
+          setCaptureOverlay(key, String(count), "まもなく撮影します");
+          await wait(1000);
+        }
+
+        setCaptureOverlay(key, "REC", "2秒間撮影しています");
+
+        const recorder = new MediaRecorder(stream, { mimeType });
+        const chunks = [];
+        const stopped = new Promise((resolve, reject) => {
+          recorder.addEventListener("stop", resolve, { once: true });
+          recorder.addEventListener("error", () => reject(new Error(`${label}動画の撮影に失敗しました。`)), { once: true });
+        });
+
+        recorder.addEventListener("dataavailable", (event) => {
+          if (event.data && event.data.size > 0) {
+            chunks.push(event.data);
+          }
+        });
+
+        recorder.start();
+        await wait(RECORDING_DURATION_MS);
+        recorder.stop();
+        await stopped;
+
+        setCaptureOverlay(key, "読み込み中", "撮影した動画をセットしています");
+
+        const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+        const recordedFile = new File(chunks, `${key.toLowerCase()}-capture.${extension}`, { type: mimeType });
+        await handleVideoUpload(key, recordedFile);
+      } finally {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+        }
+        if (state.video.srcObject) {
+          state.video.srcObject = null;
+        }
+        activeCaptureKey = null;
+        setCaptureOverlay(key, "", "");
+        updateActionButtons();
+      }
+    }
+
+    function getSupportedExportMimeType() {
+      if (typeof MediaRecorder === "undefined") return "";
+      if (MediaRecorder.isTypeSupported(EXPORT_MIME_TYPE)) return EXPORT_MIME_TYPE;
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) return "video/webm;codecs=vp8";
+      if (MediaRecorder.isTypeSupported("video/webm")) return "video/webm";
+      return "";
+    }
+
+    function wait(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function exportResultVideo() {
+      if (!hasReadyVideos()) return;
+
+      const mimeType = getSupportedExportMimeType();
+      if (!mimeType) {
+        throw new Error("このブラウザでは Result動画の書き出しに対応していません。");
+      }
+
+      isRenderingFrame = true;
+      updateActionButtons();
+      setGeneratedResultVideo(null);
+
+      const duration = getMorphDuration();
+      const frameDurationMs = 1000 / EXPORT_FPS;
+      const totalFrames = Math.max(1, Math.ceil(duration * EXPORT_FPS));
+      const stream = resultCanvas.captureStream(EXPORT_FPS);
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      });
+
+      const stopped = new Promise((resolve, reject) => {
+        recorder.addEventListener("stop", resolve, { once: true });
+        recorder.addEventListener("error", () => reject(new Error("動画書き出しに失敗しました。")), { once: true });
+      });
+
+      recorder.start();
+      resetLandmarkCache();
+
+      try {
+        for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+          const frameStart = performance.now();
+          const time = Math.min(frameIndex / EXPORT_FPS, Math.max(0, duration - 0.001));
+          timeRange.value = String(time);
+          updateTimelineUI();
+          await renderFrameAtTime(time, { force: true });
+          const remainingWaitMs = frameDurationMs - (performance.now() - frameStart);
+          if (remainingWaitMs > 0) {
+            await wait(remainingWaitMs);
+          }
+        }
+        recorder.stop();
+        await stopped;
+
+        const blob = new Blob(chunks, { type: mimeType });
+        const objectUrl = URL.createObjectURL(blob);
+        setGeneratedResultVideo(objectUrl);
+        resultVideo.currentTime = 0;
+        normalizePlayback(resultVideo);
+        resultVideo.play().catch(() => { });
+      } finally {
+        stream.getTracks().forEach((track) => track.stop());
+        isRenderingFrame = false;
+        updateActionButtons();
+      }
+    }
+
+    function downloadResultFrame() {
+      if (!resultVideoUrl) {
+        throw new Error("保存できるResult動画がありません。");
+      }
+
+      const link = document.createElement("a");
+      link.href = resultVideoUrl;
+      link.download = "video-morph-result.webm";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    uploadABtn.addEventListener("click", () => fileInputA.click());
+    uploadBBtn.addEventListener("click", () => fileInputB.click());
+    recordABtn.addEventListener("click", async () => {
+      try {
+        await recordVideoForKey("A");
+      } catch (error) {
+        console.error(error);
+        setCaptureOverlay("A", "", "");
+      }
+    });
+    recordBBtn.addEventListener("click", async () => {
+      try {
+        await recordVideoForKey("B");
+      } catch (error) {
+        console.error(error);
+        setCaptureOverlay("B", "", "");
+      }
+    });
+
+    fileInputA.addEventListener("change", async (event) => {
+      const [file] = event.target.files ?? [];
+      await handleVideoUpload("A", file);
+      event.target.value = "";
+    });
+
+    fileInputB.addEventListener("change", async (event) => {
+      const [file] = event.target.files ?? [];
+      await handleVideoUpload("B", file);
+      event.target.value = "";
+    });
+
+    generateResultBtn.addEventListener("click", async () => {
+      try {
+        await exportResultVideo();
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+    blendRange.addEventListener("input", async () => {
+      syncBlendLabel();
+      setGeneratedResultVideo(null);
+      await syncCurrentTime(Number(timeRange.value || 0));
+    });
+
+    timeRange.addEventListener("input", async () => {
+      await syncCurrentTime(Number(timeRange.value));
+    });
+
+    downloadResultBtn.addEventListener("click", () => {
+      try {
+        downloadResultFrame();
+      } catch (error) {
+        console.error(error);
+      }
+    });
+
+    syncBlendLabel();
+    updateTimelineUI();
+    updateActionButtons();
+  </script>
+</body>
+
+</html>

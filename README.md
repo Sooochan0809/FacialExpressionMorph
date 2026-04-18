@@ -98,10 +98,25 @@ http://localhost:8000
 ```text
 .
 ├── index.html
+├── video-morph.html
 ├── face-api.min.js
 ├── models/
 └── README.md
 ```
+
+## 動画版
+
+動画フレームどうしのモーフィングを試すページは `video.html` です。
+
+- `index.html`
+  - 静止画 / カメラ撮影ベースのモーフィング
+- `video-morph.html`
+  - A/B の動画ファイルを読み込み、同じ時刻のフレームどうしをリアルタイムでモーフ表示
+
+補足:
+
+- `video-morph.html` は現時点では動画ファイルのリアルタイムプレビュー向けです
+- 動画そのものの書き出しではなく、Resultフレームの PNG 保存に対応しています
 
 ## 注意点
 
