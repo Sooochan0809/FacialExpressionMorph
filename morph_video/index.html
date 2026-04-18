@@ -133,6 +133,20 @@
       border: 1px solid var(--color-border);
     }
 
+    .camera-guide {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: 70%;
+      aspect-ratio: 3 / 4;
+      max-height: calc(100% - 2rem);
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 1;
+    }
+
     .panel-media {
       position: absolute;
       inset: 0;
@@ -334,6 +348,7 @@
         <div class="panel-media">
           <video id="videoA" playsinline muted preload="metadata"></video>
         </div>
+        <div class="camera-guide" aria-hidden="true"></div>
         <div class="panel-top-right">
           <button id="uploadABtn" class="import-chip-btn" type="button">ファイルから追加</button>
         </div>
@@ -354,6 +369,7 @@
         <div class="panel-media">
           <video id="videoB" playsinline muted preload="metadata"></video>
         </div>
+        <div class="camera-guide" aria-hidden="true"></div>
         <div class="panel-top-right">
           <button id="uploadBBtn" class="import-chip-btn" type="button">ファイルから追加</button>
         </div>
@@ -460,6 +476,8 @@
     let isRenderingFrame = false;
     let resultVideoUrl = null;
     let activeCaptureKey = null;
+    let previewStream = null;
+    let previewStreamPromise = null;
     const landmarkCache = {
       A: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
       B: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
@@ -510,6 +528,17 @@
       video.playbackRate = 1;
     }
 
+    function getCameraConstraints() {
+      return {
+        video: {
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+          facingMode: "user",
+        },
+        audio: false,
+      };
+    }
+
     function setCaptureOverlay(key, text = "", subText = "") {
       const state = videoState[key];
       if (!state) return;
@@ -531,14 +560,64 @@
       }
 
       if (state.video.srcObject) {
-        const tracks = state.video.srcObject.getTracks?.() ?? [];
-        tracks.forEach((track) => track.stop());
+        const currentStream = state.video.srcObject;
+        if (currentStream !== previewStream) {
+          const tracks = currentStream.getTracks?.() ?? [];
+          tracks.forEach((track) => track.stop());
+        }
         state.video.srcObject = null;
       }
 
       state.video.removeAttribute("src");
       state.video.load();
       normalizePlayback(state.video);
+    }
+
+    async function attachPreviewToIdlePanels() {
+      if (!previewStream) return;
+
+      await Promise.all(Object.values(videoState).map(async (state) => {
+        if (state.ready || state.video.srcObject === previewStream) return;
+
+        state.video.removeAttribute("src");
+        state.video.srcObject = previewStream;
+        state.video.muted = true;
+        normalizePlayback(state.video);
+        try {
+          await state.video.play();
+        } catch (error) {
+          console.warn("プレビュー再生を開始できませんでした。", error);
+        }
+      }));
+    }
+
+    async function startPreviewCamera() {
+      if (previewStream) {
+        await attachPreviewToIdlePanels();
+        return previewStream;
+      }
+
+      if (previewStreamPromise) {
+        await previewStreamPromise;
+        return previewStream;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("このブラウザではカメラにアクセスできません。");
+      }
+
+      previewStreamPromise = navigator.mediaDevices
+        .getUserMedia(getCameraConstraints())
+        .then(async (stream) => {
+          previewStream = stream;
+          await attachPreviewToIdlePanels();
+          return stream;
+        })
+        .finally(() => {
+          previewStreamPromise = null;
+        });
+
+      return previewStreamPromise;
     }
 
     function setGeneratedResultVideo(url = null) {
@@ -871,6 +950,8 @@
         state.ready = false;
         updateActionButtons();
         throw error;
+      } finally {
+        await attachPreviewToIdlePanels();
       }
     }
 
@@ -902,20 +983,14 @@
 
       let stream = null;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 720 },
-            height: { ideal: 1280 },
-            facingMode: "user",
-          },
-          audio: false,
-        });
+        await startPreviewCamera();
+        stream = previewStream?.clone() ?? null;
+        if (!stream) {
+          throw new Error("カメラプレビューを開始できませんでした。");
+        }
 
         clearVideoSource(state);
-        state.video.srcObject = stream;
-        state.video.muted = true;
-        normalizePlayback(state.video);
-        await state.video.play();
+        await attachPreviewToIdlePanels();
 
         for (let count = COUNTDOWN_SECONDS; count >= 1; count -= 1) {
           setCaptureOverlay(key, String(count), "まもなく撮影します");
@@ -951,12 +1026,18 @@
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
         }
-        if (state.video.srcObject) {
-          state.video.srcObject = null;
-        }
+        await attachPreviewToIdlePanels();
         activeCaptureKey = null;
         setCaptureOverlay(key, "", "");
         updateActionButtons();
+      }
+    }
+
+    async function initializeApp() {
+      try {
+        await startPreviewCamera();
+      } catch (error) {
+        console.warn("初期カメラプレビューを開始できませんでした。", error);
       }
     }
 
@@ -1106,6 +1187,7 @@
     syncBlendLabel();
     updateTimelineUI();
     updateActionButtons();
+    initializeApp();
   </script>
 </body>
 
