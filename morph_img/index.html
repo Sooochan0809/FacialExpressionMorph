@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FacialExpressionMorph IMG</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --color-surface: #f0f0f0;
+      --color-surface-subtle: #f5f5f5;
+      --color-surface-muted: #bbbbbb;
+      --color-text: #111;
+      --color-text-muted: #666;
+      --color-text-inverse: #fff;
+      --color-accent-a: #ff0000;
+      --color-accent-b: #0000ff;
+      --color-text-accent: #ff6b6b;
+      --color-border: #ccc;
+      --color-overlay: rgba(0, 0, 0, 0.68);
+      --color-overlay-strong: rgba(0, 0, 0, 0.8);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem;
+      font-family: sans-serif;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      background: none;
+      border: none;
+      padding: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      box-shadow: none;
+      outline: none;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .preview-row {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 1rem;
+      align-items: center;
+      justify-content: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      container-type: size;
+    }
+
+    .preview-item {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 auto;
+      width: min(calc((100vw - 4rem) / 3), calc((100dvh - 4.5rem) * 3 / 4));
+      min-width: min(320px, calc(100vw - 2rem));
+      min-height: 0;
+      aspect-ratio: 3 / 4;
+    }
+
+    .camera-panel {
+      position: relative;
+      width: 100%;
+      min-height: 0;
+      flex: 1;
+      border-radius: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      container-type: size;
+    }
+
+    .camera-guide {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      width: 70%;
+      aspect-ratio: 3 / 4;
+      max-height: calc(100% - 2rem);
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .panel-media {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .panel-media video,
+    .panel-media canvas {
+      position: absolute;
+      inset: 0;
+    }
+
+    .media-hidden {
+      display: none !important;
+    }
+
+    .upload-chip {
+      border: none;
+      border-radius: 999px;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      color: var(--color-text-inverse);
+      background: var(--color-overlay);
+      cursor: pointer;
+    }
+
+    .upload-chip:hover {
+      background: var(--color-overlay-strong);
+    }
+
+    .panel-action-group {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .capture-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      border: none;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      line-height: 1;
+      color: var(--color-text-inverse);
+      cursor: pointer;
+      background: var(--color-overlay);
+    }
+
+    .capture-chip-a {
+      background: rgba(255, 0, 0, 0.9);
+    }
+
+    .capture-chip-b {
+      background: rgba(0, 0, 255, 0.9);
+    }
+
+    .panel-center-control {
+      position: absolute;
+      left: 50%;
+      bottom: 0.75rem;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    .download-btn {
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      padding: 0.35rem 0.7rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      background: var(--color-surface);
+      color: var(--color-text);
+    }
+
+    .download-btn:disabled {
+      color: var(--color-text-muted);
+      border-color: var(--color-border);
+      background: var(--color-surface-subtle);
+      cursor: not-allowed;
+    }
+
+    .download-btn:not(:disabled):hover {
+      background: var(--color-surface-subtle);
+    }
+
+    .panel-download-btn {
+      position: absolute;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 2;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
+      border-color: transparent;
+    }
+
+    .panel-download-btn:disabled {
+      background: rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.75);
+      border-color: transparent;
+    }
+
+    .panel-download-btn:not(:disabled):hover {
+      background: var(--color-overlay-strong);
+    }
+
+    .slider-group {
+      position: absolute;
+      left: 50%;
+      bottom: 0.75rem;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
+      max-width: calc(100% - 8rem);
+    }
+
+    .slider-group input[type="range"] {
+      width: min(160px, 35vw);
+    }
+
+    .expression-badge {
+      position: absolute;
+      left: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 1;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.75rem;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
+      font-size: 0.8rem;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+    }
+
+    .expression-line {
+      display: block;
+    }
+
+    .expression-line.is-primary {
+      color: var(--color-text-accent);
+    }
+
+    .panel-media video,
+    .panel-media canvas {
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-subtle);
+      display: block;
+    }
+
+    .panel-media video {
+      object-fit: cover;
+      object-position: center center;
+    }
+
+    @media (max-width: 1200px) {
+      .preview-row {
+        justify-content: flex-start;
+      }
+
+      .preview-item {
+        width: min(380px, calc((100dvh - 4.5rem) * 3 / 4), calc(100vw - 2rem));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 0.75rem;
+      }
+
+      .preview-item {
+        width: min(92vw, 360px, calc((100dvh - 4rem) * 3 / 4));
+      }
+    }
+
+    @media (max-width: 600px) {
+      .capture-chip {
+        width: 56px;
+        height: 56px;
+        font-size: 0.65rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>FacialExpressionMorph IMG</h1>
+  </header>
+
+  <div class="preview-row">
+    <div class="preview-item">
+      <div class="camera-panel">
+        <div class="panel-media">
+          <video id="videoA" autoplay playsinline muted></video>
+          <canvas id="shotA" class="media-hidden"></canvas>
+          <button id="downloadABtn" class="download-btn panel-download-btn" type="button" disabled>ダウンロード</button>
+        </div>
+        <div class="camera-guide" aria-hidden="true"></div>
+        <div class="panel-action-group">
+          <button id="uploadABtn" class="upload-chip" type="button">ファイルから追加</button>
+        </div>
+        <button id="captureABtn" class="capture-chip capture-chip-a panel-center-control" type="button">撮影</button>
+        <div id="shotAExpressionStatus" class="expression-badge">未撮影</div>
+      </div>
+    </div>
+
+    <div class="preview-item">
+      <div class="camera-panel">
+        <div class="panel-media">
+          <video id="videoB" autoplay playsinline muted></video>
+          <canvas id="shotB" class="media-hidden"></canvas>
+          <button id="downloadBBtn" class="download-btn panel-download-btn" type="button" disabled>ダウンロード</button>
+        </div>
+        <div class="camera-guide" aria-hidden="true"></div>
+        <div class="panel-action-group">
+          <button id="uploadBBtn" class="upload-chip" type="button">ファイルから追加</button>
+        </div>
+        <button id="captureBBtn" class="capture-chip capture-chip-b panel-center-control" type="button">撮影</button>
+        <div id="shotBExpressionStatus" class="expression-badge">未撮影</div>
+      </div>
+    </div>
+
+    <div class="preview-item">
+      <div class="camera-panel">
+        <div class="panel-media">
+          <canvas id="canvas"></canvas>
+          <button id="downloadResultBtn" class="download-btn panel-download-btn" type="button" disabled>ダウンロード</button>
+          <div class="slider-group">
+            <span id="tValue">0.50</span>
+            <input id="tRange" type="range" min="0" max="1" step="0.01" value="0.5" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="fileInputA" type="file" accept=".png,image/png" hidden />
+  <input id="fileInputB" type="file" accept=".png,image/png" hidden />
+
+  <script src="../face-api.min.js"></script>
+  <script type="module">
+    import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
+    import Delaunator from "https://cdn.jsdelivr.net/npm/delaunator@5/+esm";
+
+    const OUTPUT_WIDTH = 300;
+    const OUTPUT_HEIGHT = 400;
+    const OUTPUT_RATIO = OUTPUT_WIDTH / OUTPUT_HEIGHT;
+
+    const $ = (id) => document.getElementById(id);
+    const liveVideos = {
+      A: $("videoA"),
+      B: $("videoB"),
+    };
+    const tRange = $("tRange");
+    const tValue = $("tValue");
+    const resultCanvas = $("canvas");
+    const resultCtx = resultCanvas.getContext("2d");
+    const shots = {
+      A: {
+        canvas: $("shotA"),
+        video: liveVideos.A,
+        status: $("shotAExpressionStatus"),
+        captureBtn: $("captureABtn"),
+        downloadBtn: $("downloadABtn"),
+        uploadBtn: $("uploadABtn"),
+        fileInput: $("fileInputA"),
+        fileName: "A.png",
+        liveExpressions: null,
+      },
+      B: {
+        canvas: $("shotB"),
+        video: liveVideos.B,
+        status: $("shotBExpressionStatus"),
+        captureBtn: $("captureBBtn"),
+        downloadBtn: $("downloadBBtn"),
+        uploadBtn: $("uploadBBtn"),
+        fileInput: $("fileInputB"),
+        fileName: "B.png",
+        liveExpressions: null,
+      },
+    };
+    const resultDownloadBtn = $("downloadResultBtn");
+
+    let stream = null;
+    let faceLandmarker = null;
+    let expressionDetectionTimer = null;
+    const expressionOrder = [
+      "neutral",
+      "happy",
+      "sad",
+      "angry",
+      "fearful",
+      "disgusted",
+      "surprised",
+    ];
+
+    const shotImages = { A: null, B: null };
+
+    function hasCanvasImage(canvas) {
+      return canvas.width > 0 && canvas.height > 0;
+    }
+
+    function updateDownloadStates() {
+      Object.values(shots).forEach((shot) => {
+        shot.downloadBtn.disabled = !shot.image;
+      });
+
+      resultDownloadBtn.disabled = !(shotImages.A && shotImages.B && hasCanvasImage(resultCanvas));
+    }
+
+    async function downloadCanvas(canvas, fileName) {
+      if (!hasCanvasImage(canvas)) {
+        throw new Error("ダウンロードできる画像がありません。");
+      }
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        throw new Error("画像の書き出しに失敗しました。");
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+
+      try {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    function syncSliderLabel() {
+      const t = Number(tRange.value);
+      const ratioA = Math.round((1 - t) * 100);
+      const ratioB = Math.round(t * 100);
+      tValue.textContent = `A ${ratioA}% / B ${ratioB}%`;
+    }
+
+    syncSliderLabel();
+
+    tRange.addEventListener("input", () => {
+      syncSliderLabel();
+
+      if (shotImages.A && shotImages.B) {
+        try {
+          renderMorph();
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+
+    async function createLandmarker() {
+      if (faceLandmarker) return faceLandmarker;
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+
+      faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        },
+        runningMode: "IMAGE",
+        numFaces: 1,
+      });
+
+      return faceLandmarker;
+    }
+
+    async function loadFaceApiModels() {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri("../models"),
+        faceapi.nets.faceExpressionNet.loadFromUri("../models"),
+      ]);
+    }
+
+    async function startCamera() {
+      if (stream) return stream;
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 960 }
+        },
+        audio: false,
+      });
+
+      await Promise.all(Object.values(liveVideos).map(async (videoEl) => {
+        videoEl.srcObject = stream;
+
+        await new Promise((resolve) => {
+          videoEl.onloadedmetadata = () => resolve();
+        });
+
+        await videoEl.play();
+      }));
+
+      startExpressionDetection();
+      return stream;
+    }
+
+    function formatExpressionLabel(label) {
+      const labels = {
+        neutral: "無表情",
+        happy: "喜び",
+        sad: "悲しみ",
+        angry: "怒り",
+        fearful: "恐れ",
+        disgusted: "嫌悪",
+        surprised: "驚き",
+      };
+
+      return labels[label] || label;
+    }
+
+    function getPrimaryExpressionLabel(expressions) {
+      let primaryLabel = null;
+      let primaryScore = -1;
+
+      expressionOrder.forEach((label) => {
+        const score = expressions[label];
+        if (typeof score !== "number") return;
+        if (score > primaryScore) {
+          primaryScore = score;
+          primaryLabel = label;
+        }
+      });
+
+      return primaryLabel;
+    }
+
+    function formatExpressionSummary(expressions) {
+      const primaryLabel = getPrimaryExpressionLabel(expressions);
+
+      return expressionOrder
+        .filter((label) => typeof expressions[label] === "number")
+        .map((label) => {
+          const className = label === primaryLabel ? "expression-line is-primary" : "expression-line";
+          return `<span class="${className}">${formatExpressionLabel(label)} ${Math.round(expressions[label] * 100)}%</span>`;
+        })
+        .join("");
+    }
+
+    function updateExpressionStatus(expressions) {
+      const html = expressions
+        ? formatExpressionSummary(expressions)
+        : '<span class="expression-line">感情未検出</span>';
+
+      Object.values(shots).forEach((shot) => {
+        shot.liveExpressions = expressions ? { ...expressions } : null;
+        if (!shot.image) {
+          shot.status.innerHTML = html;
+        }
+      });
+    }
+
+    function formatDetectedExpressions(expressions) {
+      return expressions
+        ? formatExpressionSummary(expressions)
+        : '<span class="expression-line">感情未検出</span>';
+    }
+
+    async function detectExpressionsFromSource(source) {
+      const detection = await faceapi
+        .detectSingleFace(source, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+
+      return detection?.expressions && Object.keys(detection.expressions).length > 0
+        ? detection.expressions
+        : null;
+    }
+
+    function startExpressionDetection() {
+      if (expressionDetectionTimer) return;
+
+      const detectVideoExpressions = async () => {
+        const previewVideo = liveVideos.A;
+        if (!previewVideo || previewVideo.readyState < 2) {
+          return;
+        }
+
+        try {
+          updateExpressionStatus(await detectExpressionsFromSource(previewVideo));
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      detectVideoExpressions();
+      expressionDetectionTimer = window.setInterval(detectVideoExpressions, 250);
+    }
+
+    function getCenteredCropRect(srcWidth, srcHeight, targetRatio) {
+      const srcRatio = srcWidth / srcHeight;
+
+      if (srcRatio > targetRatio) {
+        const cropHeight = srcHeight;
+        const cropWidth = cropHeight * targetRatio;
+        const sx = (srcWidth - cropWidth) / 2;
+        return { sx, sy: 0, sw: cropWidth, sh: cropHeight };
+      } else {
+        const cropWidth = srcWidth;
+        const cropHeight = cropWidth / targetRatio;
+        const sy = (srcHeight - cropHeight) / 2;
+        return { sx: 0, sy, sw: cropWidth, sh: cropHeight };
+      }
+    }
+
+    function prepareOutputCanvas(targetCanvas) {
+      targetCanvas.width = OUTPUT_WIDTH;
+      targetCanvas.height = OUTPUT_HEIGHT;
+      const ctx = targetCanvas.getContext("2d");
+      ctx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      return ctx;
+    }
+
+    function drawImageCover(targetCanvas, source) {
+      const srcWidth = source.videoWidth || source.naturalWidth || source.width;
+      const srcHeight = source.videoHeight || source.naturalHeight || source.height;
+
+      if (!srcWidth || !srcHeight) {
+        throw new Error("画像の読み込みに失敗しました。");
+      }
+
+      const { sx, sy, sw, sh } = getCenteredCropRect(srcWidth, srcHeight, OUTPUT_RATIO);
+      const ctx = prepareOutputCanvas(targetCanvas);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    }
+
+    function captureFrameToCanvas(targetCanvas, sourceVideo) {
+      if (!sourceVideo.videoWidth || !sourceVideo.videoHeight) {
+        throw new Error("カメラ映像の取得に失敗しました。");
+      }
+      drawImageCover(targetCanvas, sourceVideo);
+    }
+
+    async function canvasToImage(canvas) {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        throw new Error("画像化に失敗しました。");
+      }
+      return await createImageBitmap(blob);
+    }
+
+    async function fileToImageBitmap(file) {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      try {
+        await new Promise((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("画像ファイルの読み込みに失敗しました。"));
+          image.src = objectUrl;
+        });
+
+        return await createImageBitmap(image);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    function setCaptureButtonLabel(shot, hasCapturedImage) {
+      shot.captureBtn.textContent = hasCapturedImage ? "再撮影" : "撮影";
+    }
+
+    function resetResultCanvas() {
+      resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+      resultCanvas.width = 0;
+      resultCanvas.height = 0;
+      updateDownloadStates();
+    }
+
+    function resetShotToLive(shot) {
+      if (shot.image && typeof shot.image.close === "function") {
+        shot.image.close();
+      }
+
+      shot.image = null;
+      shot.canvas.classList.add("media-hidden");
+      shot.video.classList.remove("media-hidden");
+      shot.status.innerHTML = formatDetectedExpressions(shot.liveExpressions);
+      setCaptureButtonLabel(shot, false);
+
+      if (!shotImages.A || !shotImages.B) {
+        resetResultCanvas();
+      } else {
+        updateDownloadStates();
+      }
+    }
+
+    async function setShotFromCanvas(shot, expressionHtml) {
+      shot.status.innerHTML = expressionHtml ?? formatDetectedExpressions(await detectExpressionsFromSource(shot.canvas));
+      shot.video.classList.add("media-hidden");
+      shot.canvas.classList.remove("media-hidden");
+
+      if (shot.image && typeof shot.image.close === "function") {
+        shot.image.close();
+      }
+      shot.image = await canvasToImage(shot.canvas);
+      setCaptureButtonLabel(shot, true);
+
+      if (shotImages.A && shotImages.B) {
+        renderMorph();
+      }
+
+      updateDownloadStates();
+    }
+
+    async function loadFileToShot(file, shot) {
+      if (!file) return;
+
+      const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
+      if (!isPng) {
+        alert("PNG ファイルのみ追加できます。");
+        return;
+      }
+
+      try {
+        const bitmap = await fileToImageBitmap(file);
+        drawImageCover(shot.canvas, bitmap);
+        await setShotFromCanvas(shot);
+        bitmap.close();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "画像の追加に失敗しました。");
+      }
+    }
+
+    function getLandmarks(imgLike) {
+      const result = faceLandmarker.detect(imgLike);
+
+      if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
+        throw new Error("顔が検出できませんでした。正面に近い状態で撮影してください。");
+      }
+
+      const width = imgLike.width;
+      const height = imgLike.height;
+
+      const points = result.faceLandmarks[0].map((p) => [
+        p.x * width,
+        p.y * height,
+      ]);
+
+      points.push([0, 0]);
+      points.push([width - 1, 0]);
+      points.push([width - 1, height - 1]);
+      points.push([0, height - 1]);
+
+      return points;
+    }
+
+    function interpolatePoints(pointsA, pointsB, t) {
+      if (pointsA.length !== pointsB.length) {
+        throw new Error("ランドマーク数が一致しません。");
+      }
+
+      return pointsA.map((pa, i) => {
+        const pb = pointsB[i];
+        return [
+          pa[0] * (1 - t) + pb[0] * t,
+          pa[1] * (1 - t) + pb[1] * t,
+        ];
+      });
+    }
+
+    function clipTriangle(ctx, tri) {
+      ctx.beginPath();
+      ctx.moveTo(tri[0][0], tri[0][1]);
+      ctx.lineTo(tri[1][0], tri[1][1]);
+      ctx.lineTo(tri[2][0], tri[2][1]);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    function drawTriangleImage(ctx, img, srcTri, dstTri) {
+      const [sx0, sy0] = srcTri[0];
+      const [sx1, sy1] = srcTri[1];
+      const [sx2, sy2] = srcTri[2];
+
+      const [dx0, dy0] = dstTri[0];
+      const [dx1, dy1] = dstTri[1];
+      const [dx2, dy2] = dstTri[2];
+
+      const denom =
+        sx0 * (sy1 - sy2) +
+        sx1 * (sy2 - sy0) +
+        sx2 * (sy0 - sy1);
+
+      if (Math.abs(denom) < 1e-6) return;
+
+      const a = (dx0 * (sy1 - sy2) + dx1 * (sy2 - sy0) + dx2 * (sy0 - sy1)) / denom;
+      const b = (dy0 * (sy1 - sy2) + dy1 * (sy2 - sy0) + dy2 * (sy0 - sy1)) / denom;
+      const c = (dx0 * (sx2 - sx1) + dx1 * (sx0 - sx2) + dx2 * (sx1 - sx0)) / denom;
+      const d = (dy0 * (sx2 - sx1) + dy1 * (sx0 - sx2) + dy2 * (sx1 - sx0)) / denom;
+      const e = (dx0 * (sx1 * sy2 - sx2 * sy1) + dx1 * (sx2 * sy0 - sx0 * sy2) + dx2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+      const f = (dy0 * (sx1 * sy2 - sx2 * sy1) + dy1 * (sx2 * sy0 - sx0 * sy2) + dy2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+
+      ctx.save();
+      clipTriangle(ctx, dstTri);
+      ctx.setTransform(a, b, c, d, e, f);
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
+    }
+
+    function morphImages(imgA, imgB, pointsA, pointsB, t) {
+      resultCanvas.width = OUTPUT_WIDTH;
+      resultCanvas.height = OUTPUT_HEIGHT;
+      resultCtx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+
+      const midPoints = interpolatePoints(pointsA, pointsB, t);
+      const delaunay = Delaunator.from(midPoints);
+      const triangles = delaunay.triangles;
+
+      resultCtx.save();
+      resultCtx.globalAlpha = 1 - t;
+      for (let i = 0; i < triangles.length; i += 3) {
+        const i0 = triangles[i];
+        const i1 = triangles[i + 1];
+        const i2 = triangles[i + 2];
+
+        drawTriangleImage(
+          resultCtx,
+          imgA,
+          [pointsA[i0], pointsA[i1], pointsA[i2]],
+          [midPoints[i0], midPoints[i1], midPoints[i2]]
+        );
+      }
+      resultCtx.restore();
+
+      resultCtx.save();
+      resultCtx.globalAlpha = t;
+      for (let i = 0; i < triangles.length; i += 3) {
+        const i0 = triangles[i];
+        const i1 = triangles[i + 1];
+        const i2 = triangles[i + 2];
+
+        drawTriangleImage(
+          resultCtx,
+          imgB,
+          [pointsB[i0], pointsB[i1], pointsB[i2]],
+          [midPoints[i0], midPoints[i1], midPoints[i2]]
+        );
+      }
+      resultCtx.restore();
+      updateDownloadStates();
+    }
+
+    function renderMorph() {
+      if (!shotImages.A || !shotImages.B) {
+        throw new Error("AとBを先に撮影してください。");
+      }
+
+      const t = Number(tRange.value);
+      const pointsA = getLandmarks(shotImages.A);
+      const pointsB = getLandmarks(shotImages.B);
+
+      morphImages(shotImages.A, shotImages.B, pointsA, pointsB, t);
+    }
+
+    async function initializeApp() {
+      try {
+        await Promise.all([
+          createLandmarker(),
+          loadFaceApiModels(),
+        ]);
+        await startCamera();
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "カメラ開始に失敗しました。");
+      }
+    }
+
+    async function captureShot(key) {
+      const shot = shots[key];
+      try {
+        if (shot.image) {
+          resetShotToLive(shot);
+          return;
+        }
+
+        captureFrameToCanvas(shot.canvas, shot.video);
+        await setShotFromCanvas(shot, formatDetectedExpressions(shot.liveExpressions));
+      } catch (err) {
+        console.error(err);
+        alert(err.message || `${key}の撮影に失敗しました。`);
+      }
+    }
+    Object.entries(shots).forEach(([key, shot]) => {
+      Object.defineProperty(shot, "image", {
+        get: () => shotImages[key],
+        set: (value) => {
+          shotImages[key] = value;
+        },
+      });
+
+      const openFilePicker = () => shot.fileInput.click();
+      setCaptureButtonLabel(shot, false);
+      shot.captureBtn.addEventListener("click", () => captureShot(key));
+      shot.uploadBtn.addEventListener("click", openFilePicker);
+      shot.downloadBtn.addEventListener("click", async () => {
+        try {
+          await downloadCanvas(shot.canvas, shot.fileName);
+        } catch (err) {
+          console.error(err);
+          alert(err.message || `${key}のダウンロードに失敗しました。`);
+        }
+      });
+      shot.fileInput.addEventListener("change", async (event) => {
+        const [file] = event.target.files ?? [];
+        await loadFileToShot(file, shot);
+        event.target.value = "";
+      });
+    });
+
+    resultDownloadBtn.addEventListener("click", async () => {
+      try {
+        await downloadCanvas(resultCanvas, "Result.png");
+      } catch (err) {
+        console.error(err);
+        alert(err.message || "Resultのダウンロードに失敗しました。");
+      }
+    });
+
+    updateDownloadStates();
+    initializeApp();
+  </script>
+</body>
+
+</html>
