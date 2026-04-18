@@ -437,6 +437,9 @@
     const blendLabel = $("blendLabel");
     const resultCanvas = $("resultCanvas");
     const resultCtx = resultCanvas.getContext("2d");
+    const warpCanvasA = document.createElement("canvas");
+    const warpCanvasB = document.createElement("canvas");
+    const TRIANGLE_OVERDRAW_PX = 0.75;
     const resultVideo = $("resultVideo");
     const frameCanvasA = $("frameCanvasA");
     const frameCanvasB = $("frameCanvasB");
@@ -763,13 +766,59 @@
       });
     }
 
+    function getExpandedTriangle(triangle, expandPx = TRIANGLE_OVERDRAW_PX) {
+      const centroidX = (triangle[0][0] + triangle[1][0] + triangle[2][0]) / 3;
+      const centroidY = (triangle[0][1] + triangle[1][1] + triangle[2][1]) / 3;
+
+      return triangle.map(([x, y]) => {
+        const dx = x - centroidX;
+        const dy = y - centroidY;
+        const length = Math.hypot(dx, dy);
+        if (length < 1e-6) return [x, y];
+
+        const scale = (length + expandPx) / length;
+        return [
+          centroidX + dx * scale,
+          centroidY + dy * scale,
+        ];
+      });
+    }
+
     function clipTriangle(ctx, triangle) {
+      const expandedTriangle = getExpandedTriangle(triangle);
       ctx.beginPath();
-      ctx.moveTo(triangle[0][0], triangle[0][1]);
-      ctx.lineTo(triangle[1][0], triangle[1][1]);
-      ctx.lineTo(triangle[2][0], triangle[2][1]);
+      ctx.moveTo(expandedTriangle[0][0], expandedTriangle[0][1]);
+      ctx.lineTo(expandedTriangle[1][0], expandedTriangle[1][1]);
+      ctx.lineTo(expandedTriangle[2][0], expandedTriangle[2][1]);
       ctx.closePath();
       ctx.clip();
+    }
+
+    function prepareWarpCanvas(canvas) {
+      if (canvas.width !== OUTPUT_WIDTH || canvas.height !== OUTPUT_HEIGHT) {
+        canvas.width = OUTPUT_WIDTH;
+        canvas.height = OUTPUT_HEIGHT;
+      }
+
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      return ctx;
+    }
+
+    function renderWarpedFrame(targetCanvas, image, sourcePoints, destinationPoints, triangles) {
+      const ctx = prepareWarpCanvas(targetCanvas);
+      for (let i = 0; i < triangles.length; i += 3) {
+        const i0 = triangles[i];
+        const i1 = triangles[i + 1];
+        const i2 = triangles[i + 2];
+
+        drawTriangleImage(
+          ctx,
+          image,
+          [sourcePoints[i0], sourcePoints[i1], sourcePoints[i2]],
+          [destinationPoints[i0], destinationPoints[i1], destinationPoints[i2]]
+        );
+      }
     }
 
     function drawTriangleImage(ctx, image, srcTri, dstTri) {
@@ -813,37 +862,14 @@
       const delaunay = Delaunator.from(midPoints);
       const triangles = delaunay.triangles;
 
-      resultCtx.save();
-      resultCtx.globalAlpha = 1 - t;
-      for (let i = 0; i < triangles.length; i += 3) {
-        const i0 = triangles[i];
-        const i1 = triangles[i + 1];
-        const i2 = triangles[i + 2];
+      renderWarpedFrame(warpCanvasA, frameA, pointsA, midPoints, triangles);
+      renderWarpedFrame(warpCanvasB, frameB, pointsB, midPoints, triangles);
 
-        drawTriangleImage(
-          resultCtx,
-          frameA,
-          [pointsA[i0], pointsA[i1], pointsA[i2]],
-          [midPoints[i0], midPoints[i1], midPoints[i2]]
-        );
-      }
-      resultCtx.restore();
-
-      resultCtx.save();
+      resultCtx.globalAlpha = 1;
+      resultCtx.drawImage(warpCanvasA, 0, 0);
       resultCtx.globalAlpha = t;
-      for (let i = 0; i < triangles.length; i += 3) {
-        const i0 = triangles[i];
-        const i1 = triangles[i + 1];
-        const i2 = triangles[i + 2];
-
-        drawTriangleImage(
-          resultCtx,
-          frameB,
-          [pointsB[i0], pointsB[i1], pointsB[i2]],
-          [midPoints[i0], midPoints[i1], midPoints[i2]]
-        );
-      }
-      resultCtx.restore();
+      resultCtx.drawImage(warpCanvasB, 0, 0);
+      resultCtx.globalAlpha = 1;
     }
 
     async function seekVideo(video, time) {
