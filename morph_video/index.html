@@ -14,6 +14,7 @@
       --color-text: #111111;
       --color-text-muted: #666666;
       --color-text-inverse: #ffffff;
+      --color-text-accent: #ff6b6b;
       --color-border: #cccccc;
       --color-overlay: rgba(0, 0, 0, 0.72);
       --color-accent-a: rgba(255, 0, 0, 0.9);
@@ -258,6 +259,29 @@
       letter-spacing: 0.02em;
     }
 
+    .expression-badge {
+      position: absolute;
+      left: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 2;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.75rem;
+      background: var(--color-overlay);
+      color: var(--color-text-inverse);
+      font-size: 0.8rem;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      max-width: calc(100% - 8rem);
+    }
+
+    .expression-line {
+      display: block;
+    }
+
+    .expression-line.is-primary {
+      color: var(--color-text-accent);
+    }
+
     .result-overlay {
       position: absolute;
       left: 50%;
@@ -361,6 +385,7 @@
             <span id="captureOverlayASub" class="capture-overlay-sub">まもなく撮影します</span>
           </div>
         </div>
+        <div id="videoAExpressionStatus" class="expression-badge">感情未検出</div>
       </div>
     </div>
 
@@ -382,6 +407,7 @@
             <span id="captureOverlayBSub" class="capture-overlay-sub">まもなく撮影します</span>
           </div>
         </div>
+        <div id="videoBExpressionStatus" class="expression-badge">感情未検出</div>
       </div>
     </div>
 
@@ -405,6 +431,7 @@
   <canvas id="frameCanvasA" class="hidden"></canvas>
   <canvas id="frameCanvasB" class="hidden"></canvas>
 
+  <script src="../face-api.min.js"></script>
   <script type="module">
     import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
     import Delaunator from "https://cdn.jsdelivr.net/npm/delaunator@5/+esm";
@@ -449,6 +476,8 @@
     const captureOverlayB = $("captureOverlayB");
     const captureOverlayBText = $("captureOverlayBText");
     const captureOverlayBSub = $("captureOverlayBSub");
+    const videoAExpressionStatus = $("videoAExpressionStatus");
+    const videoBExpressionStatus = $("videoBExpressionStatus");
 
     const videoState = {
       A: {
@@ -459,8 +488,10 @@
         overlay: captureOverlayA,
         overlayText: captureOverlayAText,
         overlaySub: captureOverlayASub,
+        status: videoAExpressionStatus,
         url: null,
         ready: false,
+        liveExpressions: null,
       },
       B: {
         video: videoB,
@@ -470,17 +501,30 @@
         overlay: captureOverlayB,
         overlayText: captureOverlayBText,
         overlaySub: captureOverlayBSub,
+        status: videoBExpressionStatus,
         url: null,
         ready: false,
+        liveExpressions: null,
       },
     };
 
     let faceLandmarker = null;
+    let expressionDetectionTimer = null;
+    let isDetectingExpressions = false;
     let isRenderingFrame = false;
     let resultVideoUrl = null;
     let activeCaptureKey = null;
     let previewStream = null;
     let previewStreamPromise = null;
+    const expressionOrder = [
+      "neutral",
+      "happy",
+      "sad",
+      "angry",
+      "fearful",
+      "disgusted",
+      "surprised",
+    ];
     const landmarkCache = {
       A: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
       B: { points: null, lastDetectionAt: 0, lastVideoTime: -1 },
@@ -525,10 +569,121 @@
       });
     }
 
+    function setRecordButtonLabel(key, label = "撮影") {
+      const state = videoState[key];
+      if (!state?.recordBtn) return;
+      state.recordBtn.textContent = label;
+    }
+
     function normalizePlayback(video) {
       if (!video) return;
       video.defaultPlaybackRate = 1;
       video.playbackRate = 1;
+    }
+
+    async function loadFaceApiModels() {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri("../models"),
+        faceapi.nets.faceExpressionNet.loadFromUri("../models"),
+      ]);
+    }
+
+    function formatExpressionLabel(label) {
+      const labels = {
+        neutral: "無表情",
+        happy: "喜び",
+        sad: "悲しみ",
+        angry: "怒り",
+        fearful: "恐れ",
+        disgusted: "嫌悪",
+        surprised: "驚き",
+      };
+
+      return labels[label] || label;
+    }
+
+    function getPrimaryExpressionLabel(expressions) {
+      let primaryLabel = null;
+      let primaryScore = -1;
+
+      expressionOrder.forEach((label) => {
+        const score = expressions?.[label];
+        if (typeof score !== "number") return;
+        if (score > primaryScore) {
+          primaryScore = score;
+          primaryLabel = label;
+        }
+      });
+
+      return primaryLabel;
+    }
+
+    function formatExpressionSummary(expressions) {
+      const primaryLabel = getPrimaryExpressionLabel(expressions);
+
+      return expressionOrder
+        .filter((label) => typeof expressions?.[label] === "number")
+        .map((label) => {
+          const className = label === primaryLabel ? "expression-line is-primary" : "expression-line";
+          return `<span class="${className}">${formatExpressionLabel(label)} ${Math.round(expressions[label] * 100)}%</span>`;
+        })
+        .join("");
+    }
+
+    function formatDetectedExpressions(expressions) {
+      return expressions
+        ? formatExpressionSummary(expressions)
+        : '<span class="expression-line">感情未検出</span>';
+    }
+
+    function updateExpressionStatusForKey(key, expressions) {
+      const state = videoState[key];
+      if (!state?.status) return;
+
+      state.liveExpressions = expressions ? { ...expressions } : null;
+      state.status.innerHTML = formatDetectedExpressions(expressions);
+    }
+
+    async function detectExpressionsFromSource(source) {
+      const detection = await faceapi
+        .detectSingleFace(source, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+
+      return detection?.expressions && Object.keys(detection.expressions).length > 0
+        ? detection.expressions
+        : null;
+    }
+
+    async function detectExpressionsForState(key, source = null) {
+      const state = videoState[key];
+      const targetSource = source ?? state?.video;
+      if (!state || !targetSource) return;
+
+      const expressions = await detectExpressionsFromSource(targetSource);
+      updateExpressionStatusForKey(key, expressions);
+    }
+
+    function startExpressionDetection() {
+      if (expressionDetectionTimer) return;
+
+      const detectVideoExpressions = async () => {
+        if (isDetectingExpressions) return;
+        isDetectingExpressions = true;
+
+        try {
+          await Promise.all(Object.entries(videoState).map(async ([key, state]) => {
+            if (!state.video || state.video.readyState < 2) return;
+            await detectExpressionsForState(key);
+          }));
+        } catch (error) {
+          console.error(error);
+        } finally {
+          isDetectingExpressions = false;
+        }
+      };
+
+      detectVideoExpressions();
+      expressionDetectionTimer = window.setInterval(detectVideoExpressions, 250);
     }
 
     function getCameraConstraints() {
@@ -909,6 +1064,10 @@
         await Promise.all([seekVideo(videoA, time), seekVideo(videoB, time)]);
         drawImageCover(frameCanvasA, videoA);
         drawImageCover(frameCanvasB, videoB);
+        await Promise.all([
+          detectExpressionsForState("A", frameCanvasA),
+          detectExpressionsForState("B", frameCanvasB),
+        ]);
 
         const pointsA = getCachedLandmarks("A", videoA, frameCanvasA);
         const pointsB = getCachedLandmarks("B", videoB, frameCanvasB);
@@ -941,16 +1100,18 @@
       }
     }
 
-    async function handleVideoUpload(key, file) {
+    async function handleVideoUpload(key, file, { autoplay = false, loop = false } = {}) {
       if (!file) return;
 
       const state = videoState[key];
       const label = key === "A" ? "A" : "B";
 
       state.ready = false;
+      updateExpressionStatusForKey(key, null);
       clearVideoSource(state);
       state.url = URL.createObjectURL(file);
       state.video.src = state.url;
+      state.video.loop = loop;
       state.video.load();
       normalizePlayback(state.video);
       resetLandmarkCache(key);
@@ -961,7 +1122,37 @@
           state.video.onerror = () => reject(new Error(`${label}動画の読み込みに失敗しました。`));
         });
 
+        if (state.video.readyState < 2) {
+          await new Promise((resolve, reject) => {
+            const handleLoadedData = () => {
+              cleanup();
+              resolve();
+            };
+            const handleError = () => {
+              cleanup();
+              reject(new Error(`${label}動画フレームの読み込みに失敗しました。`));
+            };
+            const cleanup = () => {
+              state.video.removeEventListener("loadeddata", handleLoadedData);
+              state.video.removeEventListener("error", handleError);
+            };
+
+            state.video.addEventListener("loadeddata", handleLoadedData, { once: true });
+            state.video.addEventListener("error", handleError, { once: true });
+          });
+        }
+
         state.ready = true;
+        drawImageCover(key === "A" ? frameCanvasA : frameCanvasB, state.video);
+        await detectExpressionsForState(key, key === "A" ? frameCanvasA : frameCanvasB);
+
+        if (autoplay) {
+          state.video.currentTime = 0;
+          state.video.play().catch((error) => {
+            console.warn(`${label}動画のループ再生を開始できませんでした。`, error);
+          });
+        }
+
         updateTimelineUI();
         updateActionButtons();
 
@@ -1023,7 +1214,8 @@
           await wait(1000);
         }
 
-        setCaptureOverlay(key, "REC", "2秒間撮影しています");
+        setCaptureOverlay(key, "", "");
+        setRecordButtonLabel(key, "撮影中");
 
         const recorder = new MediaRecorder(stream, { mimeType });
         const chunks = [];
@@ -1047,13 +1239,14 @@
 
         const extension = mimeType.includes("mp4") ? "mp4" : "webm";
         const recordedFile = new File(chunks, `${key.toLowerCase()}-capture.${extension}`, { type: mimeType });
-        await handleVideoUpload(key, recordedFile);
+        await handleVideoUpload(key, recordedFile, { autoplay: true, loop: true });
       } finally {
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
         }
         await attachPreviewToIdlePanels();
         activeCaptureKey = null;
+        setRecordButtonLabel(key, "撮影");
         setCaptureOverlay(key, "", "");
         updateActionButtons();
       }
@@ -1061,9 +1254,13 @@
 
     async function initializeApp() {
       try {
-        await startPreviewCamera();
+        await Promise.all([
+          loadFaceApiModels(),
+          startPreviewCamera(),
+        ]);
+        startExpressionDetection();
       } catch (error) {
-        console.warn("初期カメラプレビューを開始できませんでした。", error);
+        console.warn("初期化に失敗しました。", error);
       }
     }
 
