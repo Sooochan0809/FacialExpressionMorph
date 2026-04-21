@@ -28,11 +28,13 @@
 
     body {
       margin: 0;
-      min-height: 100dvh;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      gap: 1rem;
-      padding: 1rem;
+      gap: clamp(0.5rem, 1.4dvh, 1rem);
+      padding: clamp(0.5rem, 1.4dvh, 1rem);
       font-family: sans-serif;
       background: var(--color-surface);
       color: var(--color-text);
@@ -105,7 +107,7 @@
     }
 
     .preview-row {
-      flex: 1;
+      flex: 1 1 0;
       min-height: 0;
       display: flex;
       gap: 1rem;
@@ -113,12 +115,15 @@
       overflow-y: hidden;
       align-items: center;
       justify-content: center;
+      container-type: size;
     }
 
     .preview-item {
       flex: 0 0 auto;
-      width: min(calc((100vw - 4rem) / 3), calc((100dvh - 6.25rem) * 3 / 4));
-      min-width: min(320px, calc(100vw - 2rem));
+      width: min(calc((100vw - 4rem) / 3), calc(100cqh * 3 / 4));
+      max-width: calc(100cqh * 3 / 4);
+      max-height: 100%;
+      min-width: min(320px, calc(100vw - 2rem), calc(100cqh * 3 / 4));
       min-height: 0;
       display: flex;
       flex-direction: column;
@@ -339,17 +344,13 @@
 
       .preview-item {
         flex: 0 0 auto;
-        width: min(380px, calc(100vw - 2rem));
+        width: min(380px, calc(100vw - 2rem), calc(100cqh * 3 / 4));
       }
     }
 
     @media (max-width: 720px) {
-      body {
-        padding: 0.75rem;
-      }
-
       .preview-item {
-        width: min(92vw, 360px);
+        width: min(92vw, 360px, calc(100cqh * 3 / 4));
       }
 
       .timeline-box input[type="range"] {
@@ -541,7 +542,7 @@
     let isDetectingExpressions = false;
     let isRenderingFrame = false;
     let resultVideoUrl = null;
-    let resultVideoDownloadName = "video-morph-result.mov";
+    let resultVideoDownloadName = "result.mov";
     let activeCaptureKey = null;
     let previewStream = null;
     let previewStreamPromise = null;
@@ -815,7 +816,7 @@
       return previewStreamPromise;
     }
 
-    function setGeneratedResultVideo(url = null, downloadName = "video-morph-result.mov") {
+    function setGeneratedResultVideo(url = null, downloadName = "result.mov") {
       if (resultVideoUrl) {
         URL.revokeObjectURL(resultVideoUrl);
         resultVideoUrl = null;
@@ -1397,7 +1398,7 @@
             drawImageCover(canvas, video);
           },
         });
-        downloadBlob(blob, `video-${key.toLowerCase()}.mov`);
+        downloadBlob(blob, `${key.toLowerCase()}.mov`);
       } finally {
         await seekVideo(video, Math.min(originalTime, Math.max(0, duration - 0.001)));
         if (!wasPaused) {
@@ -1468,7 +1469,7 @@
 
         const blob = new Blob(chunks, { type: mimeType });
         const objectUrl = URL.createObjectURL(blob);
-        setGeneratedResultVideo(objectUrl, "video-morph-result.mov");
+        setGeneratedResultVideo(objectUrl, "result.mov");
         resultVideo.currentTime = 0;
         normalizePlayback(resultVideo);
         resultVideo.play().catch(() => { });
