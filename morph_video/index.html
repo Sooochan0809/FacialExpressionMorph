@@ -187,6 +187,15 @@
       justify-content: center;
     }
 
+    .panel-media-bottom-right {
+      position: absolute;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 2;
+      display: flex;
+      justify-content: flex-end;
+    }
+
     .import-chip-btn {
       display: flex;
       align-items: center;
@@ -366,7 +375,7 @@
     <span id="timeLabel" class="timeline-label">0.00s / 0.00s</span>
     <div class="global-controls">
       <button id="generateResultBtn" class="action-btn" type="button" disabled>書き出し</button>
-      <button id="downloadResultBtn" class="action-btn" type="button" disabled>保存</button>
+      <button id="downloadResultBtn" class="action-btn" type="button" disabled>ダウンロード</button>
     </div>
   </div>
 
@@ -375,6 +384,9 @@
       <div class="panel">
         <div class="panel-media">
           <video id="videoA" playsinline muted preload="metadata"></video>
+          <div class="panel-media-bottom-right">
+            <button id="downloadABtn" class="import-chip-btn" type="button" disabled>ダウンロード</button>
+          </div>
         </div>
         <div class="camera-guide" aria-hidden="true"></div>
         <div class="panel-top-right">
@@ -397,6 +409,9 @@
       <div class="panel">
         <div class="panel-media">
           <video id="videoB" playsinline muted preload="metadata"></video>
+          <div class="panel-media-bottom-right">
+            <button id="downloadBBtn" class="import-chip-btn" type="button" disabled>ダウンロード</button>
+          </div>
         </div>
         <div class="camera-guide" aria-hidden="true"></div>
         <div class="panel-top-right">
@@ -446,7 +461,12 @@
     const LANDMARK_REFRESH_MS = 120;
     const MIN_VIDEO_TIME_DELTA = 1 / 120;
     const EXPORT_FPS = 15;
-    const EXPORT_MIME_TYPE = "video/webm;codecs=vp9";
+    const MOV_MIME_TYPE_CANDIDATES = [
+      "video/quicktime",
+      "video/mp4;codecs=avc1.42E01E",
+      "video/mp4;codecs=h264",
+      "video/mp4",
+    ];
     const COUNTDOWN_SECONDS = 3;
     const RECORDING_DURATION_MS = 2000;
 
@@ -460,6 +480,8 @@
     const uploadBBtn = $("uploadBBtn");
     const recordABtn = $("recordABtn");
     const recordBBtn = $("recordBBtn");
+    const downloadABtn = $("downloadABtn");
+    const downloadBBtn = $("downloadBBtn");
     const generateResultBtn = $("generateResultBtn");
     const downloadResultBtn = $("downloadResultBtn");
     const timeRange = $("timeRange");
@@ -489,6 +511,7 @@
         input: fileInputA,
         uploadBtn: uploadABtn,
         recordBtn: recordABtn,
+        downloadBtn: downloadABtn,
         overlay: captureOverlayA,
         overlayText: captureOverlayAText,
         overlaySub: captureOverlayASub,
@@ -502,6 +525,7 @@
         input: fileInputB,
         uploadBtn: uploadBBtn,
         recordBtn: recordBBtn,
+        downloadBtn: downloadBBtn,
         overlay: captureOverlayB,
         overlayText: captureOverlayBText,
         overlaySub: captureOverlayBSub,
@@ -517,6 +541,7 @@
     let isDetectingExpressions = false;
     let isRenderingFrame = false;
     let resultVideoUrl = null;
+    let resultVideoDownloadName = "video-morph-result.mov";
     let activeCaptureKey = null;
     let previewStream = null;
     let previewStreamPromise = null;
@@ -564,12 +589,20 @@
     }
 
     function updateActionButtons() {
-      generateResultBtn.disabled = !hasReadyVideos() || isRenderingFrame;
-      downloadResultBtn.disabled = !resultVideoUrl || isRenderingFrame;
+      const canExportMov = Boolean(getSupportedMovMimeType());
+      const movSupportMessage = canExportMov
+        ? ""
+        : "このブラウザではMOV保存に対応していません。SafariなどMP4/MOV記録に対応したブラウザでお試しください。";
+      generateResultBtn.disabled = !hasReadyVideos() || isRenderingFrame || !canExportMov;
+      generateResultBtn.title = movSupportMessage;
+      downloadResultBtn.disabled = !resultVideoUrl || isRenderingFrame || !canExportMov;
+      downloadResultBtn.title = movSupportMessage;
       Object.values(videoState).forEach((state) => {
         const disabled = isRenderingFrame || activeCaptureKey !== null;
         state.uploadBtn.disabled = disabled;
         state.recordBtn.disabled = disabled;
+        state.downloadBtn.disabled = disabled || !state.ready || !canExportMov;
+        state.downloadBtn.title = movSupportMessage;
       });
     }
 
@@ -782,11 +815,12 @@
       return previewStreamPromise;
     }
 
-    function setGeneratedResultVideo(url = null) {
+    function setGeneratedResultVideo(url = null, downloadName = "video-morph-result.mov") {
       if (resultVideoUrl) {
         URL.revokeObjectURL(resultVideoUrl);
         resultVideoUrl = null;
       }
+      resultVideoDownloadName = downloadName;
 
       if (!url) {
         resultVideo.removeAttribute("src");
@@ -1268,11 +1302,115 @@
       }
     }
 
-    function getSupportedExportMimeType() {
+    function getSupportedMovMimeType() {
       if (typeof MediaRecorder === "undefined") return "";
-      if (MediaRecorder.isTypeSupported(EXPORT_MIME_TYPE)) return EXPORT_MIME_TYPE;
-      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8")) return "video/webm;codecs=vp8";
-      if (MediaRecorder.isTypeSupported("video/webm")) return "video/webm";
+      return MOV_MIME_TYPE_CANDIDATES.find((mimeType) =>
+        MediaRecorder.isTypeSupported(mimeType)
+      ) || "";
+    }
+
+    function downloadBlob(blob, filename) {
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    }
+
+    function getVideoDurationOrThrow(video, label) {
+      const duration = video.duration || 0;
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error(`${label}動画の長さを取得できませんでした。`);
+      }
+      return duration;
+    }
+
+    async function recordCanvasFrames({ duration, drawFrame, errorMessage }) {
+      const mimeType = getSupportedMovMimeType();
+      if (!mimeType) {
+        throw new Error("このブラウザではMOV動画の書き出しに対応していません。Safariなど、MP4/MOV記録に対応したブラウザでお試しください。");
+      }
+
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = OUTPUT_WIDTH;
+      exportCanvas.height = OUTPUT_HEIGHT;
+      const stream = exportCanvas.captureStream(EXPORT_FPS);
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks = [];
+      const frameDurationMs = 1000 / EXPORT_FPS;
+      const totalFrames = Math.max(1, Math.ceil(duration * EXPORT_FPS));
+
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      });
+
+      const stopped = new Promise((resolve, reject) => {
+        recorder.addEventListener("stop", resolve, { once: true });
+        recorder.addEventListener("error", () => reject(new Error(errorMessage)), { once: true });
+      });
+
+      recorder.start();
+
+      try {
+        for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+          const frameStart = performance.now();
+          const time = Math.min(frameIndex / EXPORT_FPS, Math.max(0, duration - 0.001));
+          await drawFrame(exportCanvas, time);
+          const remainingWaitMs = frameDurationMs - (performance.now() - frameStart);
+          if (remainingWaitMs > 0) {
+            await wait(remainingWaitMs);
+          }
+        }
+        recorder.stop();
+        await stopped;
+        return new Blob(chunks, { type: mimeType });
+      } finally {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    }
+
+    async function exportSourceVideo(key) {
+      const state = videoState[key];
+      if (!state?.ready) return;
+
+      const label = key === "A" ? "A" : "B";
+      const video = state.video;
+      const duration = getVideoDurationOrThrow(video, label);
+      const originalTime = video.currentTime || 0;
+      const wasPaused = video.paused;
+
+      isRenderingFrame = true;
+      updateActionButtons();
+
+      try {
+        video.pause();
+        const blob = await recordCanvasFrames({
+          duration,
+          errorMessage: `${label}動画の書き出しに失敗しました。`,
+          drawFrame: async (canvas, time) => {
+            await seekVideo(video, time);
+            drawImageCover(canvas, video);
+          },
+        });
+        downloadBlob(blob, `video-${key.toLowerCase()}.mov`);
+      } finally {
+        await seekVideo(video, Math.min(originalTime, Math.max(0, duration - 0.001)));
+        if (!wasPaused) {
+          video.play().catch(() => { });
+        }
+        isRenderingFrame = false;
+        updateActionButtons();
+      }
+    }
+
+    function getSupportedExportMimeType() {
+      const movMimeType = getSupportedMovMimeType();
+      if (movMimeType) return movMimeType;
       return "";
     }
 
@@ -1285,7 +1423,7 @@
 
       const mimeType = getSupportedExportMimeType();
       if (!mimeType) {
-        throw new Error("このブラウザでは Result動画の書き出しに対応していません。");
+        throw new Error("このブラウザではResult動画のMOV書き出しに対応していません。");
       }
 
       isRenderingFrame = true;
@@ -1330,7 +1468,7 @@
 
         const blob = new Blob(chunks, { type: mimeType });
         const objectUrl = URL.createObjectURL(blob);
-        setGeneratedResultVideo(objectUrl);
+        setGeneratedResultVideo(objectUrl, "video-morph-result.mov");
         resultVideo.currentTime = 0;
         normalizePlayback(resultVideo);
         resultVideo.play().catch(() => { });
@@ -1348,7 +1486,7 @@
 
       const link = document.createElement("a");
       link.href = resultVideoUrl;
-      link.download = "video-morph-result.webm";
+      link.download = resultVideoDownloadName;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1356,6 +1494,20 @@
 
     uploadABtn.addEventListener("click", () => fileInputA.click());
     uploadBBtn.addEventListener("click", () => fileInputB.click());
+    downloadABtn.addEventListener("click", async () => {
+      try {
+        await exportSourceVideo("A");
+      } catch (error) {
+        console.error(error);
+      }
+    });
+    downloadBBtn.addEventListener("click", async () => {
+      try {
+        await exportSourceVideo("B");
+      } catch (error) {
+        console.error(error);
+      }
+    });
     recordABtn.addEventListener("click", async () => {
       try {
         await recordVideoForKey("A");
