@@ -497,6 +497,8 @@
     const resultVideo = $("resultVideo");
     const frameCanvasA = $("frameCanvasA");
     const frameCanvasB = $("frameCanvasB");
+    const expressionCanvasA = document.createElement("canvas");
+    const expressionCanvasB = document.createElement("canvas");
     const captureOverlayA = $("captureOverlayA");
     const captureOverlayAText = $("captureOverlayAText");
     const captureOverlayASub = $("captureOverlayASub");
@@ -513,6 +515,7 @@
         uploadBtn: uploadABtn,
         recordBtn: recordABtn,
         downloadBtn: downloadABtn,
+        expressionCanvas: expressionCanvasA,
         overlay: captureOverlayA,
         overlayText: captureOverlayAText,
         overlaySub: captureOverlayASub,
@@ -527,6 +530,7 @@
         uploadBtn: uploadBBtn,
         recordBtn: recordBBtn,
         downloadBtn: downloadBBtn,
+        expressionCanvas: expressionCanvasB,
         overlay: captureOverlayB,
         overlayText: captureOverlayBText,
         overlaySub: captureOverlayBSub,
@@ -694,8 +698,14 @@
 
     async function detectExpressionsForState(key, source = null) {
       const state = videoState[key];
-      const targetSource = source ?? state?.video;
-      if (!state || !targetSource) return;
+      if (!state) return;
+
+      let targetSource = source;
+      if (!targetSource) {
+        if (!state.video || state.video.readyState < 2) return;
+        drawImageCover(state.expressionCanvas, state.video);
+        targetSource = state.expressionCanvas;
+      }
 
       const expressions = await detectExpressionsFromSource(targetSource);
       updateExpressionStatusForKey(key, expressions);
@@ -1139,7 +1149,7 @@
       }
     }
 
-    async function handleVideoUpload(key, file, { autoplay = false, loop = false } = {}) {
+    async function handleVideoUpload(key, file, { autoplay = true, loop = true } = {}) {
       if (!file) return;
 
       const state = videoState[key];
